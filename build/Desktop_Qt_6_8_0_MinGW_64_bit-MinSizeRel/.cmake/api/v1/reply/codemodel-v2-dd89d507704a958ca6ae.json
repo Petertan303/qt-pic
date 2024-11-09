@@ -1,0 +1,79 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-MinSizeRel-6d77016226520a8d5f60.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"name" : "MinSizeRel",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "t4-2",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "t4-2::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-t4-2-MinSizeRel-3bc986d5ea2724872e55.json",
+					"name" : "t4-2",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "t4-2_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-t4-2_autogen-MinSizeRel-488b5c70f858e7856c0e.json",
+					"name" : "t4-2_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "t4-2_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-t4-2_autogen_timestamp_deps-MinSizeRel-c5280c6fe1cf3d5d1b37.json",
+					"name" : "t4-2_autogen_timestamp_deps",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel",
+		"source" : "C:/Users/Peter_Tan/Documents/t4-2"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}

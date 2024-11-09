@@ -1,0 +1,23 @@
+# ninja log v6
+11	611	7528343334910083	t4-2_autogen/timestamp	e23cd416b91ac9d4
+1920	5292	7527782761824197	CMakeFiles/t4-2.dir/main.cpp.obj	427bddc12abac6db
+11	611	7528343334910083	t4-2_autogen/mocs_compilation.cpp	e23cd416b91ac9d4
+11	611	7528343334910083	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/t4-2_autogen/timestamp	e23cd416b91ac9d4
+11	611	7528343334910083	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/t4-2_autogen/mocs_compilation.cpp	e23cd416b91ac9d4
+1788	5361	7527782760508814	CMakeFiles/t4-2.dir/t4-2_autogen/mocs_compilation.cpp.obj	8d13aad3f7a01588
+4	178	7527782735281304	CMakeFiles/clean.additional	a3476301029ece61
+178	271	7527782737025012	clean	68a46948986ac029
+612	4270	7528343340915762	CMakeFiles/t4-2.dir/mainwindow.cpp.obj	2ef1faa08ead6bf8
+4270	4925	7528343377488536	t4-2.exe	7b62ca9a7e0b569
+3	1477	7528549062288550	build.ninja	18b0536f29e6dce
+3	176	7528549063647976	CMakeFiles/clean.additional	a3476301029ece61
+176	298	7528549065372471	clean	68a46948986ac029
+17	2377	7528549100943487	t4-2_autogen/timestamp	e23cd416b91ac9d4
+17	2377	7528549100943487	t4-2_autogen/mocs_compilation.cpp	e23cd416b91ac9d4
+17	2377	7528549100943487	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/t4-2_autogen/timestamp	e23cd416b91ac9d4
+17	2377	7528549100943487	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Debug/t4-2_autogen/mocs_compilation.cpp	e23cd416b91ac9d4
+2847	3975	7528549109087174	CMakeFiles/t4-2.dir/mainwindow.rc.obj	228a28fa4a318ff7
+2378	6515	7528549104405004	CMakeFiles/t4-2.dir/t4-2_autogen/mocs_compilation.cpp.obj	8d13aad3f7a01588
+2535	6516	7528549105972966	CMakeFiles/t4-2.dir/main.cpp.obj	427bddc12abac6db
+2707	6789	7528549107691267	CMakeFiles/t4-2.dir/mainwindow.cpp.obj	2ef1faa08ead6bf8
+6789	7791	7528549148513850	t4-2.exe	5cae5108d0dd4f34
