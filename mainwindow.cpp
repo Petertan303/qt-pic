@@ -48,6 +48,22 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+QNetworkRequest MainWindow::readApiData(){
+    QFile ApiJson("./ApiData.json");
+    ApiJson.open(QIODevice::ReadOnly);
+    QByteArray jsonData = ApiJson.readAll();
+    ApiJson.close();
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData);
+    QJsonObject jsonObject = jsonDoc.object();
+
+    QNetworkRequest request(jsonObject["url"].toString());
+    for (auto it = jsonObject.constBegin(); it != jsonObject.constEnd(); ++it){
+        if(it.key() != "url")
+            request.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
+    }
+    return request;
+}
+
 void MainWindow::recoverHistory(){
     QFile historyJson("./history");
     historyJson.open(QIODevice::ReadOnly);
@@ -76,12 +92,8 @@ void MainWindow::onSendRequestButtonClicked()
                                        + " </strong>张在等待...</p>");
     }
     count ++;
-    QUrl url("https://api.draw.t4wefan.pub/sdapi/v1/txt2img");
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-    request.setRawHeader("api", "t4");
-    request.setRawHeader("api_key", "Kd_oa9Oj7GJF7rGLYUH0xg");
 
+    QNetworkRequest request = readApiData();
     QByteArray postData;
     postData.append("timeout=600&");
     postData.append("prompt=" + QUrl::toPercentEncoding(prompt) + "&");

@@ -39,6 +39,7 @@ private:
     void showImage(const QByteArray &imageData);
     void showError(const QString &errorString);
     void recoverHistory();
+    QNetworkRequest readApiData();
 };
 
 #endif // MAINWINDOW_H

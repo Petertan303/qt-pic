@@ -815,6 +815,6 @@ C:/Users/Peter_Tan/Documents/t4-2/mainwindow.h
  mdp:G:/Qt/Tools/mingw1310_64/x86_64-w64-mingw32/include/wctype.h
 C:/Users/Peter_Tan/Documents/t4-2/errordialog.cpp
  uic:ui_error.h
-C:/Users/Peter_Tan/Documents/t4-2/main.cpp
 C:/Users/Peter_Tan/Documents/t4-2/mainwindow.cpp
  uic:ui_mainwindow.h
+C:/Users/Peter_Tan/Documents/t4-2/main.cpp
