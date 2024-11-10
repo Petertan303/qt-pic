@@ -1,9 +1,0 @@
-# ninja log v6
-4	1839	7527768574744774	t4-2_autogen/timestamp	d73308ca1dc3c4e5
-4	1839	7527768574744774	t4-2_autogen/mocs_compilation.cpp	d73308ca1dc3c4e5
-4	1839	7527768574744774	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Release/t4-2_autogen/timestamp	d73308ca1dc3c4e5
-4	1839	7527768574744774	C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-Release/t4-2_autogen/mocs_compilation.cpp	d73308ca1dc3c4e5
-1949	4869	7527768578105572	CMakeFiles/t4-2.dir/main.cpp.obj	f93aa821fcb7b966
-1849	4906	7527768577102172	CMakeFiles/t4-2.dir/t4-2_autogen/mocs_compilation.cpp.obj	4a6f3d11ac77e580
-2052	5334	7527768579133159	CMakeFiles/t4-2.dir/mainwindow.cpp.obj	3f7b0627380a997a
-5334	5910	7527768611950362	t4-2.exe	f6534b6474430c1f

@@ -1,9 +1,0 @@
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/t4-2.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/edit_cache.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/rebuild_cache.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/list_install_components.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/install.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/install/local.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/install/strip.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/t4-2_autogen_timestamp_deps.dir
-C:/Users/Peter_Tan/Documents/t4-2/build/Desktop_Qt_6_8_0_MinGW_64_bit-MinSizeRel/CMakeFiles/t4-2_autogen.dir
