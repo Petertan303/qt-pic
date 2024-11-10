@@ -20,6 +20,8 @@
 #include <QVBoxLayout>
 #include <QKeySequence>
 #include <QDir>
+#include <tuple>
+#include <QMessageBox>
 
 qint16 count;
 
@@ -48,7 +50,7 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-QNetworkRequest MainWindow::readApiData(){
+std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
     QFile ApiJson("./ApiData.json");
     ApiJson.open(QIODevice::ReadOnly);
     QByteArray jsonData = ApiJson.readAll();
@@ -57,11 +59,25 @@ QNetworkRequest MainWindow::readApiData(){
     QJsonObject jsonObject = jsonDoc.object();
 
     QNetworkRequest request(jsonObject["url"].toString());
-    for (auto it = jsonObject.constBegin(); it != jsonObject.constEnd(); ++it){
+    QJsonObject jsonHeader = jsonObject.value("header").toObject();
+    QJsonObject jsonBody = jsonObject.value("body").toObject();
+    for (auto it = jsonHeader.constBegin(); it != jsonHeader.constEnd(); ++it){
         if(it.key() != "url")
             request.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
     }
-    return request;
+    request.setRawHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    QByteArray postData;
+    QString prompt = ui->promptTextEdit->toPlainText();
+    QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
+    for (auto it = jsonBody.constBegin(); it != jsonBody.constEnd(); ++it){
+        QString stringPost = it.key().toUtf8() + "=" + it.value().toString().toUtf8() + "&";
+        postData.append(stringPost.toUtf8());
+    }
+    postData.append("prompt=" + QUrl::toPercentEncoding(prompt) + "&");
+    postData.append("negative_prompt=, " + QUrl::toPercentEncoding(negativePrompt));
+
+    return std::make_tuple(request, postData);
 }
 
 void MainWindow::recoverHistory(){
@@ -78,8 +94,7 @@ void MainWindow::recoverHistory(){
 
 void MainWindow::onSendRequestButtonClicked()
 {
-    QString prompt = ui->promptTextEdit->toPlainText();
-    QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
+    // QMessageBox::information(this, "POSTing", "posting...");
     if(count==0){
         ui->outputTextEdit->append("");
         ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始画图...</strong>"));
@@ -92,12 +107,18 @@ void MainWindow::onSendRequestButtonClicked()
                                        + " </strong>张在等待...</p>");
     }
     count ++;
+    auto [request, postData] = readApiData();
+    // QMessageBox::information(this, "header", request);
+    // QMessageBox::information(this, "body", postData);
 
-    QNetworkRequest request = readApiData();
-    QByteArray postData;
-    postData.append("timeout=600&");
-    postData.append("prompt=" + QUrl::toPercentEncoding(prompt) + "&");
-    postData.append("negative_prompt=, " + QUrl::toPercentEncoding(negativePrompt));
+    // showError(request.rawHeaderList());
+    // showError("sending...");
+    QList<QByteArray> headers = request.rawHeaderList();
+    for (const QByteArray &header : headers) {
+        qDebug() << "Header:" << header << "=" << request.rawHeader(header);
+    }
+    QString strTmp = QString::fromUtf8(postData);
+    qDebug() << strTmp;
 
     networkManager->post(request, postData);
 }

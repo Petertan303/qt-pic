@@ -39,7 +39,7 @@ private:
     void showImage(const QByteArray &imageData);
     void showError(const QString &errorString);
     void recoverHistory();
-    QNetworkRequest readApiData();
+    std::tuple<QNetworkRequest, QByteArray> readApiData();
 };
 
 #endif // MAINWINDOW_H
