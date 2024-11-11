@@ -22,21 +22,25 @@
 #include <QDir>
 #include <tuple>
 #include <QMessageBox>
+#include <QWidget>
 
 qint16 count;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
+    // : ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
     networkManager = new QNetworkAccessManager(this);
 
-    // statusLabel = new QLabel("准备发送请求...", this);
+    // statusoutputTextEdit = new QoutputTextEdit("准备发送请求...", this);
     ui->outputTextEdit->append("启动！");
-    // ui->statusBar->addWidget(statusLabel);  // 将 statusLabel 添加到 statusBar
+    // ui->statusBar->addWidget(statusoutputTextEdit);  // 将 statusoutputTextEdit 添加到 statusBar
 
-    QShortcut *shortcut = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_A), this);
-    connect(shortcut, &QShortcut::activated, ui->sendRequestButton, &QPushButton::click);
+    QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_A), this);
+    connect(shortcutDraw, &QShortcut::activated, ui->sendRequestButton, &QPushButton::click);
+    QShortcut *shortcutSaveHistory = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_S), this);
+    connect(shortcutSaveHistory, &QShortcut::activated, this, &MainWindow::saveHistory);
     connect(ui->ClearButton, &QPushButton::clicked, this, &MainWindow::onClearButtonClicked);
     // connect(ui->ClearButton, &QPushButton::clicked, this, &ui->outputTextEdit->clear);
     connect(ui->sendRequestButton, &QPushButton::clicked, this, &MainWindow::onSendRequestButtonClicked);
@@ -51,6 +55,9 @@ MainWindow::~MainWindow()
 }
 
 std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
+    QString prompt = ui->promptTextEdit->toPlainText();
+    QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
+
     QFile ApiJson("./ApiData.json");
     ApiJson.open(QIODevice::ReadOnly);
     QByteArray jsonData = ApiJson.readAll();
@@ -68,8 +75,6 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
     request.setRawHeader("Content-Type", "application/x-www-form-urlencoded");
 
     QByteArray postData;
-    QString prompt = ui->promptTextEdit->toPlainText();
-    QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
     for (auto it = jsonBody.constBegin(); it != jsonBody.constEnd(); ++it){
         QString stringPost = it.key().toUtf8() + "=" + it.value().toString().toUtf8() + "&";
         postData.append(stringPost.toUtf8());
@@ -78,6 +83,17 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
     postData.append("negative_prompt=, " + QUrl::toPercentEncoding(negativePrompt));
 
     return std::make_tuple(request, postData);
+}
+
+void MainWindow::saveHistory(){
+    QJsonObject promptJson;
+    promptJson["prompt"] = ui->promptTextEdit->toPlainText();
+    promptJson["negativePrompt"] = ui->negativePromptTextEdit->toPlainText();
+    QFile historyJson("./history");
+    if (historyJson.open(QIODevice::WriteOnly)) {
+        QTextStream out(&historyJson);
+        out << QJsonDocument(promptJson).toJson();
+    }
 }
 
 void MainWindow::recoverHistory(){
@@ -94,7 +110,6 @@ void MainWindow::recoverHistory(){
 
 void MainWindow::onSendRequestButtonClicked()
 {
-    // QMessageBox::information(this, "POSTing", "posting...");
     if(count==0){
         ui->outputTextEdit->append("");
         ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始画图...</strong>"));
@@ -108,18 +123,16 @@ void MainWindow::onSendRequestButtonClicked()
     }
     count ++;
     auto [request, postData] = readApiData();
-    // QMessageBox::information(this, "header", request);
-    // QMessageBox::information(this, "body", postData);
 
-    // showError(request.rawHeaderList());
-    // showError("sending...");
+    // 打印请求头
     QList<QByteArray> headers = request.rawHeaderList();
     for (const QByteArray &header : headers) {
         qDebug() << "Header:" << header << "=" << request.rawHeader(header);
     }
-    QString strTmp = QString::fromUtf8(postData);
-    qDebug() << strTmp;
 
+    //打印请求体
+    // QString strTmp = QString::fromUtf8(postData);
+    // qDebug() << strTmp;
     networkManager->post(request, postData);
 }
 
@@ -152,7 +165,6 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
 
     if (!images.isEmpty()) {
         if(count!=0){
-            // ui->outputTextEdit->append("接下来还有 " + QString::number(count) + " 张...");
             ui->outputTextEdit->append("");
             ui->outputTextEdit->insertHtml(QStringLiteral("<p>接下来还有<strong> ")\
                                            + QString::number(count)\
@@ -160,7 +172,6 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
         }
         else{
             ui->outputTextEdit->append("");
-            // ui->outputTextEdit->append("画图完成！");
             ui->outputTextEdit->insertHtml("<strong>画图完成！</strong>");
             ui->outputTextEdit->append(" ");
         }
@@ -168,14 +179,7 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
         saveImageAndJson(imageData, jsonObj);
         showImage(imageData);
 
-        QJsonObject promptJson;
-        promptJson["prompt"] = ui->promptTextEdit->toPlainText();
-        promptJson["negativePrompt"] = ui->negativePromptTextEdit->toPlainText();
-        QFile historyJson("./history");
-        if (historyJson.open(QIODevice::WriteOnly)) {
-            QTextStream out(&historyJson);
-            out << QJsonDocument(promptJson).toJson();
-        }
+        saveHistory();
     }
     reply->deleteLater();
 }
@@ -238,7 +242,9 @@ void MainWindow::showImage(const QByteArray &imageData)
     imageDialog->setLayout(layout);
     imageDialog->setWindowTitle("图片");
     imageDialog->resize(400, 600);  // 可以根据需要调整对话框的大小
-    imageDialog->exec();  // 显示对话框
+    imageDialog->setModal(false);
+    // 用exec默认是模态，只能聚焦最后一个窗口
+    imageDialog->show();
 }
 
 void MainWindow::showError(const QString &errorString)

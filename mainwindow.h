@@ -18,6 +18,7 @@ class MainWindow;
 }
 
 class MainWindow : public QMainWindow
+// class MainWindow : public QWidget
 {
     Q_OBJECT
 
@@ -39,6 +40,7 @@ private:
     void showImage(const QByteArray &imageData);
     void showError(const QString &errorString);
     void recoverHistory();
+    void saveHistory();
     std::tuple<QNetworkRequest, QByteArray> readApiData();
 };
 
