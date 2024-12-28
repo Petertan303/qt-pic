@@ -1,7 +1,9 @@
+#include "globals.h"
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 // #include "ui_error.h"
 #include "errordialog.h"
+#include "starPromptWindow.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -23,28 +25,44 @@
 #include <tuple>
 #include <QMessageBox>
 #include <QWidget>
+#include <QLineEdit>
 
 qint16 count;
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow)
+    : QMainWindow(parent), ui(new Ui::MainWindow), m_starPromptWindow(new starPromptWindow(this))
     // : ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    addMenuBar();
     networkManager = new QNetworkAccessManager(this);
 
     // statusoutputTextEdit = new QoutputTextEdit("准备发送请求...", this);
     ui->outputTextEdit->append("启动！");
     // ui->statusBar->addWidget(statusoutputTextEdit);  // 将 statusoutputTextEdit 添加到 statusBar
 
-    QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_A), this);
+    QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_S), this);
     connect(shortcutDraw, &QShortcut::activated, ui->sendRequestButton, &QPushButton::click);
     QShortcut *shortcutSaveHistory = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_S), this);
-    connect(shortcutSaveHistory, &QShortcut::activated, this, &MainWindow::saveHistory);
     connect(ui->ClearButton, &QPushButton::clicked, this, &MainWindow::onClearButtonClicked);
+    connect(shortcutSaveHistory, &QShortcut::activated, this, &MainWindow::saveHistory);
     // connect(ui->ClearButton, &QPushButton::clicked, this, &ui->outputTextEdit->clear);
-    connect(ui->sendRequestButton, &QPushButton::clicked, this, &MainWindow::onSendRequestButtonClicked);
+    connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
+        MainWindow::draw(ui->promptTextEdit->toPlainText(),
+                         ui->negativePromptTextEdit->toPlainText(),
+                         ui->titleLineEdit->text());
+    });
     connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onNetworkReply);
+
+    // connect(starWindow, &QApplication::aboutToQuit, this, &MainWindow::saveStarPrompt);
+    connect(m_starPromptWindow,
+            &starPromptWindow::drawSignal,
+            this,
+            &MainWindow::draw);
+    connect(m_starPromptWindow,
+            &starPromptWindow::loadPromptSignal,
+            this,
+            &MainWindow::loadPrompt);
 
     recoverHistory();
 }
@@ -52,13 +70,14 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+    delete m_starPromptWindow;
 }
 
-std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
-    QString prompt = ui->promptTextEdit->toPlainText();
-    QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
+std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, QString negativePrompt){
+    // QString prompt = ui->promptTextEdit->toPlainText();
+    // QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
 
-    QFile ApiJson("./ApiData.json");
+    QFile ApiJson("./dataFile/ApiData.json");
     ApiJson.open(QIODevice::ReadOnly);
     QByteArray jsonData = ApiJson.readAll();
     ApiJson.close();
@@ -85,34 +104,81 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(){
     return std::make_tuple(request, postData);
 }
 
+void MainWindow::addMenuBar(){
+    QFont ft;
+    ft.setPointSize(12);
+    QMenuBar *menuBar = new QMenuBar(this);
+    setMenuBar(menuBar);
+    QMenu *fileMenu = menuBar->addMenu("&Star");
+    fileMenu->setFont(ft);
+    QAction *starPromptAction = new QAction("&Star Prompt", this);
+    QAction *addToStarAction = new QAction("&Add to Star", this);
+    QAction *actionButton3 = new QAction("&Button 3", this);
+    starPromptAction->setFont(ft);
+    addToStarAction->setFont(ft);
+    actionButton3->setFont(ft);
+
+    connect(starPromptAction, &QAction::triggered, this, &MainWindow::showStarPrompts);
+    // connect(addToStarAction, &QAction::triggered, this, [this]() {
+    //     MainWindow::addPromptToStar(ui->promptTextEdit->toPlainText(),
+    //                                 ui->negativePromptTextEdit->toPlainText(),
+    //                                 ui->titleLineEdit->text());});
+    connect(addToStarAction,
+            &QAction::triggered,
+            this,
+            [this]() {
+            MainWindow::sendAddPromptToStarSignal(ui->promptTextEdit->toPlainText(),
+                                                  ui->negativePromptTextEdit->toPlainText(),
+                                                  ui->titleLineEdit->text());});
+
+    fileMenu->addAction(starPromptAction);
+    fileMenu->addAction(addToStarAction);
+    fileMenu->addAction(actionButton3);
+}
+
+void MainWindow::sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title){
+    emit addPromptToStarSignal(prompt, negativePrompt, title);
+}
+
 void MainWindow::saveHistory(){
     QJsonObject promptJson;
+    promptJson["title"] = ui->titleLineEdit->text();
     promptJson["prompt"] = ui->promptTextEdit->toPlainText();
     promptJson["negativePrompt"] = ui->negativePromptTextEdit->toPlainText();
-    QFile historyJson("./history");
+    QFile historyJson("./dataFile/history");
     if (historyJson.open(QIODevice::WriteOnly)) {
         QTextStream out(&historyJson);
         out << QJsonDocument(promptJson).toJson();
+        historyJson.close();
     }
 }
 
 void MainWindow::recoverHistory(){
-    QFile historyJson("./history");
+    QFile historyJson("./dataFile/history");
     historyJson.open(QIODevice::ReadOnly);
     QByteArray jsonData = historyJson.readAll();
     historyJson.close();
+
     QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData);
     QJsonObject jsonObject = jsonDoc.object();
 
+    ui->titleLineEdit->setText(jsonObject["title"].toString());
     ui->promptTextEdit->setPlainText(jsonObject["prompt"].toString());
     ui->negativePromptTextEdit->setPlainText(jsonObject["negativePrompt"].toString());
 }
 
-void MainWindow::onSendRequestButtonClicked()
+void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
 {
+    // QString prompt = ui->promptTextEdit->toPlainText();
+    // QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
     if(count==0){
         ui->outputTextEdit->append("");
-        ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始画图...</strong>"));
+        if (key.isEmpty())
+            ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始画图...</strong>"));
+        else
+            ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始绘制")\
+                                                          + key\
+                                                          + "...</strong>");
     }
     else{
         // ui->outputTextEdit->append("有 " + QString::number(count) + " 张在等待...");
@@ -122,7 +188,7 @@ void MainWindow::onSendRequestButtonClicked()
                                        + " </strong>张在等待...</p>");
     }
     count ++;
-    auto [request, postData] = readApiData();
+    auto [request, postData] = readApiData(prompt, negativePrompt);
 
     // 打印请求头
     QList<QByteArray> headers = request.rawHeaderList();
@@ -134,11 +200,24 @@ void MainWindow::onSendRequestButtonClicked()
     // QString strTmp = QString::fromUtf8(postData);
     // qDebug() << strTmp;
     networkManager->post(request, postData);
+    // networkManager->deleteLater();
 }
 
 void MainWindow::onClearButtonClicked(){
     ui->outputTextEdit->clear();
 }
+
+
+void MainWindow::loadPrompt(QString prompt, QString negativePrompt, QString title){
+    ui->promptTextEdit->setPlainText(prompt);
+    ui->negativePromptTextEdit->setPlainText(negativePrompt);
+    ui->titleLineEdit->setText(title);
+
+    qDebug() << "Updated key:" << title;
+    qDebug() << "Negative Prompt:" << negativePrompt;
+    qDebug() << "Prompt:" << prompt;
+}
+
 
 void MainWindow::onNetworkReply(QNetworkReply* reply)
 {
@@ -211,10 +290,16 @@ void MainWindow::saveImageAndJson(const QByteArray &imageData, const QJsonObject
     if (jsonFile.open(QIODevice::WriteOnly)) {
         QTextStream out(&jsonFile);
         out << QJsonDocument(jsonObj).toJson();
+        jsonFile.close();
     } else {
         ui->outputTextEdit->append("Failed to save JSON.");
         showError("Failed to save JSON.");
     }
+    return;
+}
+
+void MainWindow::showStarPrompts(){
+    m_starPromptWindow->showStarPrompts();
 }
 
 void MainWindow::showImage(const QByteArray &imageData)
@@ -244,6 +329,7 @@ void MainWindow::showImage(const QByteArray &imageData)
     imageDialog->resize(400, 600);  // 可以根据需要调整对话框的大小
     imageDialog->setModal(false);
     // 用exec默认是模态，只能聚焦最后一个窗口
+    imageDialog->setAttribute(Qt::WA_DeleteOnClose);
     imageDialog->show();
 }
 
@@ -251,5 +337,7 @@ void MainWindow::showError(const QString &errorString)
 {
     ErrorDialog errorDialog(this);
     errorDialog.setErrorMessage(errorString);  // 设置错误信息
+    // errorDialog.setAttribute(Qt::WA_DeleteOnClose);
     errorDialog.exec();  // 显示窗口
+    // errorDialog.show(); //将会闪一下就消失
 }
