@@ -29,10 +29,12 @@ starPromptWindow::~starPromptWindow()
 // 我不想但是也可以重复创建窗口实例
 void starPromptWindow::closeEvent(QCloseEvent *event) {
     this->hide();
+    saveStarPrompt();
     event->ignore();  // 忽略关闭事件，防止窗口被销毁
 }
 
 void starPromptWindow::addPromptToStar(QString prompt, QString negativePrompt, QString title){
+    qDebug() << "exists " << title << "already";
     if (!tabWidget){
         return;
     }
@@ -41,14 +43,17 @@ void starPromptWindow::addPromptToStar(QString prompt, QString negativePrompt, Q
     int tabCount = tabWidget->count();
     for (int i = 0; i < tabCount; ++i) {
         if (tabWidget->tabText(i) == title) {
+            qDebug() << "exists " << title << "already";
             tabWidget->widget(i)->findChild<QTextEdit*>("negativePromptTextEdit")->setText(negativePrompt);
             tabWidget->widget(i)->findChild<QTextEdit*>("promptTextEdit")->setText(prompt);
             return;
         }
     }
     if (!title.isEmpty()){
+        qDebug() << "adding tab" << title;
         addTabForStarPrompts(prompt, negativePrompt, title, tabWidget);
     }
+    saveStarPrompt();
 }
 
 void starPromptWindow::addTabForStarPrompts(QString prompt, QString negativePrompt, QString key, QTabWidget *tabWidget){
@@ -77,39 +82,52 @@ void starPromptWindow::addTabForStarPrompts(QString prompt, QString negativeProm
     QPushButton *loadButton = new QPushButton("load", tabPage);
     QPushButton *drawButton = new QPushButton("quick draw", tabPage);
     QPushButton *delButton = new QPushButton("delete", tabPage);
-    QPushButton *saveButton = new QPushButton("save", tabPage);
+    // QPushButton *saveButton = new QPushButton("save", tabPage);
     QSizePolicy sizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     loadButton->setSizePolicy(sizePolicy);
     drawButton->setSizePolicy(sizePolicy);
     delButton->setSizePolicy(sizePolicy);
-    saveButton->setSizePolicy(sizePolicy);
+    // saveButton->setSizePolicy(sizePolicy);
 
     loadButton->setFont(ft);
     drawButton->setFont(ft);
     delButton->setFont(ft);
-    saveButton->setFont(ft);
+    // saveButton->setFont(ft);
 
     buttonLayout->addWidget(loadButton);
     buttonLayout->addWidget(drawButton);
-    buttonLayout->addWidget(saveButton);
+    // buttonLayout->addWidget(saveButton);
     buttonLayout->addWidget(delButton);
 
     layout->addLayout(buttonLayout);
-
-    connect(loadButton, &QPushButton::clicked, [this, key, negativePromptTextEdit, promptTextEdit]() {
-        starPromptWindow::sendLoadPromptSignal(promptTextEdit->toPlainText(), negativePromptTextEdit->toPlainText(), key);
-    });
-
-    connect(drawButton,
-            &QPushButton::clicked,
-            this,
-            [this,key, negativePrompt, prompt](){starPromptWindow::sendDrawSignal(prompt, negativePrompt, key);});
 
     layout->setStretchFactor(promptTextEdit, 5);
     layout->setStretchFactor(negativePromptTextEdit, 2);
     layout->setStretchFactor(buttonLayout, 1);
 
     tabWidget->addTab(tabPage, key);
+
+    connect(loadButton,
+            &QPushButton::clicked,
+            this,
+            [this, key, negativePromptTextEdit, promptTextEdit]() {
+                starPromptWindow::sendLoadPromptSignal(promptTextEdit->toPlainText(),
+                                                       negativePromptTextEdit->toPlainText(),
+                                                       key);
+            });
+    connect(drawButton,
+            &QPushButton::clicked,
+            this,
+            [this,key, negativePrompt, prompt](){starPromptWindow::sendDrawSignal(prompt, negativePrompt, key);});
+    // 不使用固定索引值，而是使用tabWidget->currentIndex()获取
+    connect(delButton,
+            &QPushButton::clicked,
+            this,
+            &starPromptWindow::deleteCurrentStarPrompt);
+    // connect(saveButton,
+    //         &QPushButton::clicked,
+    //         this,
+    //         &starPromptWindow::saveCurrentStarPrompt);
 }
 
 void starPromptWindow::sendDrawSignal(QString key, QString negativePrompt, QString prompt){
@@ -162,5 +180,32 @@ void starPromptWindow::showStarPrompts(){
 }
 
 void starPromptWindow::saveStarPrompt(){
+    int tabNum = tabWidget->count();
+    QJsonObject starPromptJson;
+    QJsonObject promptJson;
+    QFile historyJson("./dataFile/StarPrompts.json");
+    QString title;
+    if (historyJson.open(QIODevice::WriteOnly)) {
+        for (int currentIndex = 0; currentIndex < tabNum; currentIndex++){
+            // 不使用widget，而是tabWidget统一获取
+            title = tabWidget->tabText(currentIndex);
+            promptJson["prompt"] = tabWidget->widget(currentIndex)->findChild<QTextEdit*>("promptTextEdit")->toPlainText();
+            promptJson["negativePrompt"] = tabWidget->widget(currentIndex)->findChild<QTextEdit*>("negativePromptTextEdit")->toPlainText();
+            starPromptJson.insert(title, promptJson);
+        }
+        QTextStream out(&historyJson);
+        out << QJsonDocument(starPromptJson).toJson();
+        historyJson.close();
+    }
+}
 
+
+void starPromptWindow::deleteCurrentStarPrompt(){
+    tabWidget->removeTab(tabWidget->currentIndex());
+    saveStarPrompt();
+}
+
+
+void starPromptWindow::saveCurrentStarPrompt(){
+    return;
 }

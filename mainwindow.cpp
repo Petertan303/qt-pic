@@ -127,18 +127,19 @@ void MainWindow::addMenuBar(){
             &QAction::triggered,
             this,
             [this]() {
-            MainWindow::sendAddPromptToStarSignal(ui->promptTextEdit->toPlainText(),
-                                                  ui->negativePromptTextEdit->toPlainText(),
-                                                  ui->titleLineEdit->text());});
+            qDebug() << "adding to star......";
+            m_starPromptWindow->addPromptToStar(ui->promptTextEdit->toPlainText(),
+                                                ui->negativePromptTextEdit->toPlainText(),
+                                                ui->titleLineEdit->text());});
 
     fileMenu->addAction(starPromptAction);
     fileMenu->addAction(addToStarAction);
     fileMenu->addAction(actionButton3);
 }
 
-void MainWindow::sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title){
-    emit addPromptToStarSignal(prompt, negativePrompt, title);
-}
+// void MainWindow::sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title){
+//     emit addPromptToStarSignal(prompt, negativePrompt, title);
+// }
 
 void MainWindow::saveHistory(){
     QJsonObject promptJson;

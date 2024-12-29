@@ -21,7 +21,6 @@ public:
     ~starPromptWindow();  // 析构函数
 
 public slots:
-    void saveStarPrompt();
     void addPromptToStar(QString prompt, QString negativePrompt, QString title);
     void showStarPrompts();
     void initStarPrompts();
@@ -42,6 +41,11 @@ private:
     void drawInfoPrint(QString key, QString *negativePromptTextEdit, QString *promptTextEdit);
     void addTabForStarPrompts(QString prompt, QString negativePrompt, QString key, QTabWidget *tabWidget);
     QJsonObject readStarPrompts();
+    void saveStarPrompt();
+    void deleteCurrentStarPrompt();
+
+    // not used
+    void saveCurrentStarPrompt();
 };
 
 #endif // STARPROMPTWINDOW_H

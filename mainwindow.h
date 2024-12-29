@@ -30,7 +30,7 @@ public:
     ~MainWindow();
 
 signals:
-    void addPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
+    // void addPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
 
 private slots:
     void loadPrompt(QString prompt, QString negativePrompt, QString title);
@@ -38,7 +38,7 @@ private slots:
     void draw(QString prompt, QString negativePrompt, QString key);
     void onNetworkReply(QNetworkReply* reply);
     void onClearButtonClicked();
-    void sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
+    // void sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
 
 private:
     Ui::MainWindow *ui;
