@@ -3,6 +3,7 @@
 #include "ui_mainwindow.h"
 // #include "ui_error.h"
 #include "errordialog.h"
+// #include <QErrorMessage>
 #include "starPromptWindow.h"
 #include <QNetworkRequest>
 #include <QNetworkAccessManager>
@@ -26,6 +27,8 @@
 #include <QMessageBox>
 #include <QWidget>
 #include <QLineEdit>
+#include <QWebSocket>
+#include <QWebSocketServer>
 
 qint16 count;
 
@@ -64,14 +67,33 @@ MainWindow::MainWindow(QWidget *parent)
             this,
             &MainWindow::loadPrompt);
 
+    connectWebSocket();
     recoverHistory();
 }
 
 MainWindow::~MainWindow()
 {
+    if(m_webSocket)
+    {
+        m_webSocket->close();
+    }
     delete ui;
     delete m_starPromptWindow;
 }
+
+
+void MainWindow::connectWebSocket() {
+    ws_url = QUrl("ws://127.0.0.1:8188/ws"); // 替换为你的 ComfyUI WebSocket 地址
+    m_webSocket = new QWebSocket();
+    connect(m_webSocket, &QWebSocket::connected, this, &MainWindow::onWebSocketConnected);
+    connect(m_webSocket, &QWebSocket::disconnected, this, &MainWindow::onWebSocketDisconnected);
+    connect(m_webSocket, &QWebSocket::textMessageReceived, this, &MainWindow::onWebSocketTextMessageReceived);
+    connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
+            this, &MainWindow::onWebSocketError);
+
+    m_webSocket->open(QUrl(ws_url));
+}
+
 
 std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, QString negativePrompt){
     // QString prompt = ui->promptTextEdit->toPlainText();
@@ -103,6 +125,7 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, 
 
     return std::make_tuple(request, postData);
 }
+
 
 void MainWindow::addMenuBar(){
     QFont ft;
@@ -334,11 +357,261 @@ void MainWindow::showImage(const QByteArray &imageData)
     imageDialog->show();
 }
 
+
+void MainWindow::showImage(const QImage &image)
+{
+    // 创建一个新的对话框来显示图片
+    QDialog *imageDialog = new QDialog(this);
+    QVBoxLayout *layout = new QVBoxLayout(imageDialog);
+
+    if (!image.isNull()) {
+        // 获取对话框的大小
+        // QSize dialogSize = imageDialog->size();
+
+        // 设置图片的最大宽度和高度为对话框的大小
+        // QSize scaledSize = image.size().scaled(dialogSize, Qt::KeepAspectRatio);
+
+        // 缩放图片
+        QImage scaledImage = image.scaled(600, 600, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+        QLabel *imageLabel = new QLabel(imageDialog);
+        imageLabel->setPixmap(QPixmap::fromImage(scaledImage));
+        layout->addWidget(imageLabel);
+    }
+
+    imageDialog->setLayout(layout);
+    imageDialog->setWindowTitle("图片");
+    imageDialog->resize(400, 600);  // 可以根据需要调整对话框的大小
+    imageDialog->setModal(false);
+    // 用exec默认是模态，只能聚焦最后一个窗口
+    imageDialog->setAttribute(Qt::WA_DeleteOnClose);
+    imageDialog->show();
+}
+
+
 void MainWindow::showError(const QString &errorString)
 {
     ErrorDialog errorDialog(this);
+    // QErrorMessage errorDialog(this);
     errorDialog.setErrorMessage(errorString);  // 设置错误信息
     // errorDialog.setAttribute(Qt::WA_DeleteOnClose);
     errorDialog.exec();  // 显示窗口
     // errorDialog.show(); //将会闪一下就消失
+}
+
+
+// void MainWindow::showError(const QString &errorString)
+// {
+//     // ErrorDialog errorDialog(this);
+//     QErrorMessage errorDialog(this);
+//     errorDialog.showMessage(errorString);  // 设置错误信息
+//     // errorDialog.setAttribute(Qt::WA_DeleteOnClose);
+//     errorDialog.exec();  // 显示窗口
+//     // errorDialog.show(); //将会闪一下就消失
+// }
+
+
+void MainWindow::onWebSocketConnected() {
+    qDebug() << "WebSocket connected.";
+    // You can send subscribe message here if you already have task_id
+}
+
+void MainWindow::onWebSocketDisconnected() {
+    qDebug() << "WebSocket disconnected.";
+}
+
+
+void MainWindow::onWebSocketError(QAbstractSocket::SocketError error)
+{
+    qDebug() << "websocket error: " << error;
+}
+
+void MainWindow::onWebSocketTextMessageReceived(QString message) {
+    qDebug() << "WebSocket message received:" << message;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(message.toUtf8());
+    if(jsonDoc.isObject())
+    {
+        QJsonObject jsonObj = jsonDoc.object();
+        if(jsonObj.contains("type"))
+        {
+            QString msgType = jsonObj["type"].toString();
+            if(msgType == "status")
+            {
+                QJsonObject statusData = jsonObj["data"].toObject();
+                qDebug() << "Task Status:" << statusData["status"].toString();
+            }
+            else if(msgType == "execution_complete")
+            {
+                QJsonObject outputs = jsonObj["data"].toObject()["outputs"].toObject();
+                qDebug() << "execution_complete, output is " << outputs;
+
+                // Process image data here and call view image.
+                handleExecutionComplete(outputs);
+            }
+            else if(msgType == "progress")
+            {
+                QJsonObject progressData = jsonObj["data"].toObject();
+                qDebug() << "Task Progress:" << progressData["value"].toInt() << "/" << progressData["max"].toInt();
+            }
+
+        }
+    }
+}
+
+
+void MainWindow::sendWorkflow(const QJsonObject& workflowData){
+    networkManager = new QNetworkAccessManager();
+    connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onWorkflowResponse);
+
+    QNetworkRequest request(QUrl("http://127.0.0.1:8188/prompt")); // 替换为你的ComfyUI地址
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    QByteArray jsonData = QJsonDocument(workflowData).toJson();
+    networkManager->post(request, jsonData);
+}
+
+void MainWindow::onWorkflowResponse(QNetworkReply* reply){
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        QByteArray responseData = reply->readAll();
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(responseData);
+        if(jsonDoc.isObject())
+        {
+            QJsonObject jsonObj = jsonDoc.object();
+            if(jsonObj.contains("prompt_id"))
+            {
+                QString taskId = jsonObj["prompt_id"].toString();
+                qDebug() << "Task ID: " << taskId;
+                subscribeTask(taskId);
+            }
+        }
+
+    }
+    else
+    {
+        qDebug() << "Request failed with error:" << reply->errorString();
+    }
+
+    reply->deleteLater();
+}
+
+
+void MainWindow::subscribeTask(const QString & taskId){
+    QJsonObject subscribeMessage;
+    subscribeMessage["type"] = "subscribe";
+    subscribeMessage["task_id"] = taskId;
+
+    if (m_webSocket && m_webSocket->isValid()) {
+        m_webSocket->sendTextMessage(QJsonDocument(subscribeMessage).toJson());
+    } else {
+        qDebug() << "Websocket is not valid, can't subscribe task!";
+    }
+}
+
+void MainWindow::handleExecutionComplete(const QJsonObject& outputs)
+{
+
+    for (const QString& node_id : outputs.keys()) {
+        QJsonValue nodeValue = outputs[node_id];
+        if (nodeValue.isObject())
+        {
+            QJsonObject nodeObj = nodeValue.toObject();
+            if(nodeObj.contains("images"))
+            {
+                QJsonArray imagesArray = nodeObj["images"].toArray();
+                for(const QJsonValue& imageValue : imagesArray)
+                {
+                    if (imageValue.isObject())
+                    {
+                        QJsonObject imageData = imageValue.toObject();
+                        if(imageData.contains("filename") && imageData.contains("subfolder"))
+                        {
+                            QString filename = imageData["filename"].toString();
+                            QString subfolder = imageData["subfolder"].toString();
+
+                            // call view api
+                            viewImage(filename, subfolder);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+void MainWindow::viewImage(const QString& filename, const QString& subfolder){
+    QNetworkAccessManager *view_manager = new QNetworkAccessManager();
+    connect(view_manager, &QNetworkAccessManager::finished, this, &MainWindow::onViewResponse);
+    QString viewUrl = QString("http://127.0.0.1:8188/view?filename=%1&subfolder=%2&type=output").arg(filename).arg(subfolder); // 替换为你的 ComfyUI 地址
+    QNetworkRequest *request;
+    request = new QNetworkRequest(QUrl(viewUrl));
+    view_manager->get(*request);
+}
+
+void MainWindow::onViewResponse(QNetworkReply* reply){
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        QByteArray imageData = reply->readAll();
+
+        // use image data to preview in Qt.
+        QImage image;
+        image.loadFromData(imageData);
+
+        // show image in label or other widget
+        if(!image.isNull())
+        {
+            qDebug() << "show image in label...";
+            showImage(image);
+        }
+        else
+        {
+            qDebug() << "Failed to load image.";
+        }
+    }
+    else
+    {
+        qDebug() << "Failed to view image:" << reply->errorString();
+    }
+    reply->deleteLater();
+}
+
+
+void MainWindow::sendRequestComfyUI()
+{
+    QJsonObject workflowData;
+    QJsonObject promptObject;
+
+    QJsonObject *node1 = new QJsonObject();
+    node1->insert("inputs", QJsonObject({{"seed",4179143560},{"steps",20},{"cfg",8},{"sampler_name","euler_ancestral"},{"scheduler","normal"},{"denoise",1}}));
+    node1->insert("class_type", "KSampler");
+    promptObject["5"]= *node1;
+
+    QJsonObject *node2 = new QJsonObject();
+    node2->insert("inputs", QJsonObject({{"text","Girl, pink hair, anime, kawaii"}, {"clip","clip"}}));
+    node2->insert("class_type", "CLIPTextEncode");
+    promptObject["6"] = *node2;
+
+    QJsonObject *node3 = new QJsonObject();
+    node3->insert("inputs", QJsonObject({{"samples","5"}, {"vae","vae"}}));
+    node3->insert("class_type", "VAEDecode");
+    promptObject["7"] = *node3;
+
+    QJsonObject *node4 = new QJsonObject();
+    node4->insert("inputs", QJsonObject({{"model","model"},{"positive","6"},{"negative","6"}, {"latent_image", "latent_image"}}));
+    node4->insert("class_type", "ApplyLora");
+    promptObject["9"] = *node4;
+
+    QJsonObject *node5 = new QJsonObject();
+    node5->insert("inputs", QJsonObject({{"images","7"}}));
+    node5->insert("class_type", "SaveImage");
+    promptObject["11"] = *node5;
+
+    workflowData["prompt"] = promptObject;
+
+
+    QJsonObject client_id_data;
+    client_id_data["client_id"] = "client_id";
+    workflowData["extra_options"] = client_id_data;
+
+    sendWorkflow(workflowData);
 }
