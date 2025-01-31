@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "starPromptWindow.h"
+#include "imageWindow.h"
 #include <QMainWindow>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -30,8 +31,13 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    enum ConnectionMode {
+        HTTP,
+        WebSocket
+    };
 
 signals:
+    void sendImageToImageWindow(const QByteArray &image);  // 定义信号，用于发送 QImage
     // void addPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
 
 private slots:
@@ -45,8 +51,11 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    // imageWindow *m_imageWindow;  // 添加 imageWindow 作为成员变量
+    imageWindow *m_imageWindow;  // 添加 imageWindow 作为成员变量
     starPromptWindow *m_starPromptWindow;  // StarPromptWindow 的实例
     QNetworkAccessManager *networkManager;
+    ConnectionMode m_currentMode = HTTP;
     // QLabel *statusLabel;  // 显示请求状态的标签
     void showStarPrompts();
     void saveImageAndJson(const QByteArray &imageData, const QJsonObject &jsonResponse);
@@ -69,7 +78,10 @@ private:
     void onWebSocketDisconnected();
     void onWebSocketConnected();
     QNetworkAccessManager *view_manager;
-    void sendRequestComfyUI();
+    void sendRequestComfyUI(const QString& prompt, const QString& negativePrompt);
+    void wheelEvent(QLabel *imageLabel, QWheelEvent *event);
+    void mouseMoveEvent(QLabel *imageLabel, QPoint *mousePos, QMouseEvent *event);
+    void contextMenuEvent(QContextMenuEvent *event, QImage image);
 
 };
 

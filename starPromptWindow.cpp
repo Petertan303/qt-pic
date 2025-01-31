@@ -175,7 +175,6 @@ void starPromptWindow::initStarPrompts(){
 }
 
 void starPromptWindow::showStarPrompts(){
-
     this->show();
 }
 

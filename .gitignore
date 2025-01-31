@@ -2,3 +2,5 @@ build
 ApiData.json
 CMakeLists.txt.user
 CMakeLists.txt
+/qss
+/themes

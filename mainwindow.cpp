@@ -29,13 +29,20 @@
 #include <QLineEdit>
 #include <QWebSocket>
 #include <QWebSocketServer>
+#include <QFileDialog>
+#include <QActionGroup>
+#include "imageWindow.h"
 
 qint16 count;
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow), m_starPromptWindow(new starPromptWindow(this))
+MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
+    ui(new Ui::MainWindow),
+    m_starPromptWindow(new starPromptWindow(this)),
+    // m_imageWindow(new imageWindow(this))
+    m_imageWindow(new imageWindow(this))
     // : ui(new Ui::MainWindow)
 {
+    // m_imageWindow = new imageWindow(this);
     ui->setupUi(this);
     addMenuBar();
     networkManager = new QNetworkAccessManager(this);
@@ -50,14 +57,26 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->ClearButton, &QPushButton::clicked, this, &MainWindow::onClearButtonClicked);
     connect(shortcutSaveHistory, &QShortcut::activated, this, &MainWindow::saveHistory);
     // connect(ui->ClearButton, &QPushButton::clicked, this, &ui->outputTextEdit->clear);
+
+    // connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
+    //     MainWindow::draw(ui->promptTextEdit->toPlainText(),
+    //                      ui->negativePromptTextEdit->toPlainText(),
+    //                      ui->titleLineEdit->text());
+    // });
     connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
-        MainWindow::draw(ui->promptTextEdit->toPlainText(),
-                         ui->negativePromptTextEdit->toPlainText(),
-                         ui->titleLineEdit->text());
+        if (m_currentMode == WebSocket) {
+            sendRequestComfyUI(ui->promptTextEdit->toPlainText(),
+                               ui->negativePromptTextEdit->toPlainText());
+        } else {
+            MainWindow::draw(ui->promptTextEdit->toPlainText(),
+                             ui->negativePromptTextEdit->toPlainText(),
+                             ui->titleLineEdit->text());
+        }
     });
     connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onNetworkReply);
 
     // connect(starWindow, &QApplication::aboutToQuit, this, &MainWindow::saveStarPrompt);
+
     connect(m_starPromptWindow,
             &starPromptWindow::drawSignal,
             this,
@@ -67,31 +86,51 @@ MainWindow::MainWindow(QWidget *parent)
             this,
             &MainWindow::loadPrompt);
 
-    connectWebSocket();
+    // connect(this,
+    //         &MainWindow::sendImageToImageWindow,
+    //         m_imageWindow,
+    //         &imageWindow::setImage);
+    connect(this,
+            &MainWindow::sendImageToImageWindow,
+            m_imageWindow,
+            &imageWindow::setImage);
+
+    // connectWebSocket();
     recoverHistory();
 }
 
 MainWindow::~MainWindow()
 {
-    if(m_webSocket)
-    {
+    if(m_webSocket) {
         m_webSocket->close();
+        delete m_webSocket;
     }
     delete ui;
     delete m_starPromptWindow;
+    delete m_imageWindow;
 }
 
-
 void MainWindow::connectWebSocket() {
-    ws_url = QUrl("ws://127.0.0.1:8188/ws"); // 替换为你的 ComfyUI WebSocket 地址
-    m_webSocket = new QWebSocket();
-    connect(m_webSocket, &QWebSocket::connected, this, &MainWindow::onWebSocketConnected);
-    connect(m_webSocket, &QWebSocket::disconnected, this, &MainWindow::onWebSocketDisconnected);
-    connect(m_webSocket, &QWebSocket::textMessageReceived, this, &MainWindow::onWebSocketTextMessageReceived);
-    connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
-            this, &MainWindow::onWebSocketError);
+    if(m_webSocket) {
+        m_webSocket->close();
+        delete m_webSocket;
+    }
 
-    m_webSocket->open(QUrl(ws_url));
+    ws_url = QUrl("ws://localhost:3457/");
+    m_webSocket = new QWebSocket();
+    connect(m_webSocket, &QWebSocket::connected, this, [this]() {
+        ui->outputTextEdit->append("WebSocket已连接");
+    });
+    connect(m_webSocket, &QWebSocket::disconnected, this, [this]() {
+        ui->outputTextEdit->append("WebSocket已断开");
+    });
+    connect(m_webSocket, &QWebSocket::textMessageReceived,
+            this, &MainWindow::onWebSocketTextMessageReceived);
+    // connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::errorOccurred()),
+    //         this, [this](QAbstractSocket::SocketError error) {
+    //             ui->outputTextEdit->append("WebSocket错误: " + m_webSocket->errorString());
+    //         });
+    m_webSocket->open(ws_url);
 }
 
 
@@ -107,6 +146,9 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, 
     QJsonObject jsonObject = jsonDoc.object();
 
     QNetworkRequest request(jsonObject["url"].toString());
+    // request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, false); //qt6没有这个
+    // request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy); //防止重定向
+    qDebug() << "url: " << jsonObject["url"].toString();
     QJsonObject jsonHeader = jsonObject.value("header").toObject();
     QJsonObject jsonBody = jsonObject.value("body").toObject();
     for (auto it = jsonHeader.constBegin(); it != jsonHeader.constEnd(); ++it){
@@ -126,38 +168,52 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, 
     return std::make_tuple(request, postData);
 }
 
-
 void MainWindow::addMenuBar(){
     QFont ft;
     ft.setPointSize(12);
     QMenuBar *menuBar = new QMenuBar(this);
     setMenuBar(menuBar);
+
+    // Star Menu
     QMenu *fileMenu = menuBar->addMenu("&Star");
     fileMenu->setFont(ft);
     QAction *starPromptAction = new QAction("&Star Prompt", this);
     QAction *addToStarAction = new QAction("&Add to Star", this);
-    QAction *actionButton3 = new QAction("&Button 3", this);
     starPromptAction->setFont(ft);
     addToStarAction->setFont(ft);
-    actionButton3->setFont(ft);
 
     connect(starPromptAction, &QAction::triggered, this, &MainWindow::showStarPrompts);
-    // connect(addToStarAction, &QAction::triggered, this, [this]() {
-    //     MainWindow::addPromptToStar(ui->promptTextEdit->toPlainText(),
-    //                                 ui->negativePromptTextEdit->toPlainText(),
-    //                                 ui->titleLineEdit->text());});
-    connect(addToStarAction,
-            &QAction::triggered,
-            this,
-            [this]() {
-            qDebug() << "adding to star......";
-            m_starPromptWindow->addPromptToStar(ui->promptTextEdit->toPlainText(),
-                                                ui->negativePromptTextEdit->toPlainText(),
-                                                ui->titleLineEdit->text());});
-
+    connect(addToStarAction, &QAction::triggered, this, [this]() {
+        m_starPromptWindow->addPromptToStar(ui->promptTextEdit->toPlainText(),
+                                            ui->negativePromptTextEdit->toPlainText(),
+                                            ui->titleLineEdit->text());
+    });
     fileMenu->addAction(starPromptAction);
     fileMenu->addAction(addToStarAction);
-    fileMenu->addAction(actionButton3);
+
+    // Mode Menu
+    QMenu *modeMenu = menuBar->addMenu("&Mode");
+    modeMenu->setFont(ft);
+    QActionGroup *modeGroup = new QActionGroup(this);
+    QAction *httpAction = new QAction("HTTP", this);
+    QAction *wsAction = new QAction("WebSocket", this);
+    httpAction->setCheckable(true);
+    wsAction->setCheckable(true);
+    modeGroup->addAction(httpAction);
+    modeGroup->addAction(wsAction);
+    modeMenu->addAction(httpAction);
+    modeMenu->addAction(wsAction);
+    httpAction->setChecked(true); // 默认选择HTTP
+
+    connect(httpAction, &QAction::triggered, this, [this]() {
+        m_currentMode = HTTP;
+        ui->outputTextEdit->append("切换到HTTP模式");
+    });
+    connect(wsAction, &QAction::triggered, this, [this]() {
+        m_currentMode = WebSocket;
+        connectWebSocket();
+        ui->outputTextEdit->append("切换到WebSocket模式");
+    });
 }
 
 // void MainWindow::sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title){
@@ -191,6 +247,23 @@ void MainWindow::recoverHistory(){
     ui->negativePromptTextEdit->setPlainText(jsonObject["negativePrompt"].toString());
 }
 
+
+void MainWindow::onClearButtonClicked(){
+    ui->outputTextEdit->clear();
+}
+
+
+void MainWindow::loadPrompt(QString prompt, QString negativePrompt, QString title){
+    ui->promptTextEdit->setPlainText(prompt);
+    ui->negativePromptTextEdit->setPlainText(negativePrompt);
+    ui->titleLineEdit->setText(title);
+
+    qDebug() << "Updated key:" << title;
+    qDebug() << "Negative Prompt:" << negativePrompt;
+    qDebug() << "Prompt:" << prompt;
+}
+
+
 void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
 {
     // QString prompt = ui->promptTextEdit->toPlainText();
@@ -221,30 +294,16 @@ void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
     }
 
     //打印请求体
-    // QString strTmp = QString::fromUtf8(postData);
-    // qDebug() << strTmp;
+    QString strTmp = QString::fromUtf8(postData);
+    qDebug() << strTmp;
     networkManager->post(request, postData);
     // networkManager->deleteLater();
 }
 
-void MainWindow::onClearButtonClicked(){
-    ui->outputTextEdit->clear();
-}
-
-
-void MainWindow::loadPrompt(QString prompt, QString negativePrompt, QString title){
-    ui->promptTextEdit->setPlainText(prompt);
-    ui->negativePromptTextEdit->setPlainText(negativePrompt);
-    ui->titleLineEdit->setText(title);
-
-    qDebug() << "Updated key:" << title;
-    qDebug() << "Negative Prompt:" << negativePrompt;
-    qDebug() << "Prompt:" << prompt;
-}
-
-
 void MainWindow::onNetworkReply(QNetworkReply* reply)
 {
+    qDebug() << "network replied.";
+
     count--;
     if (reply->error() != QNetworkReply::NoError) {
         ui->outputTextEdit->append("请求失败: " + reply->errorString());
@@ -262,9 +321,12 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
         reply->deleteLater();
         return;
     }
+    // qDebug() << "reply:" << jsonResponse;
 
     QJsonObject jsonObj = jsonResponse.object();
     QJsonArray images = jsonObj["images"].toArray();
+
+    qDebug() << "img get.";
 
     if (!images.isEmpty()) {
         if(count!=0){
@@ -279,13 +341,27 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
             ui->outputTextEdit->append(" ");
         }
         QByteArray imageData = QByteArray::fromBase64(images[0].toString().toUtf8());
-        saveImageAndJson(imageData, jsonObj);
-        showImage(imageData);
 
+        // qDebug() << imageData;
+        saveImageAndJson(imageData, jsonObj);
+        qDebug() << "showing img..";
+
+        // QImage* image = new QImage;
+        // *image = QImage(imageData);
+        // showImage(*image);
+        // 显示不正常
+
+        // showImage(imageData);
+
+        emit sendImageToImageWindow(imageData);
         saveHistory();
     }
     reply->deleteLater();
 }
+
+// void MainWindow::onSendImage(){
+//     return;
+// }
 
 void MainWindow::saveImageAndJson(const QByteArray &imageData, const QJsonObject &jsonResponse)
 {
@@ -329,6 +405,7 @@ void MainWindow::showStarPrompts(){
 void MainWindow::showImage(const QByteArray &imageData)
 {
     // 创建一个新的对话框来显示图片
+    qDebug() << "showing img...";
     QDialog *imageDialog = new QDialog(this);
     QVBoxLayout *layout = new QVBoxLayout(imageDialog);
 
@@ -360,11 +437,13 @@ void MainWindow::showImage(const QByteArray &imageData)
 
 void MainWindow::showImage(const QImage &image)
 {
+    qDebug() << "showing img...";
     // 创建一个新的对话框来显示图片
     QDialog *imageDialog = new QDialog(this);
     QVBoxLayout *layout = new QVBoxLayout(imageDialog);
 
     if (!image.isNull()) {
+        qDebug() << "image is not null";
         // 获取对话框的大小
         // QSize dialogSize = imageDialog->size();
 
@@ -376,6 +455,7 @@ void MainWindow::showImage(const QImage &image)
 
         QLabel *imageLabel = new QLabel(imageDialog);
         imageLabel->setPixmap(QPixmap::fromImage(scaledImage));
+        // imageLabel->setPixmap(QPixmap::fromImage(image));
         layout->addWidget(imageLabel);
     }
 
@@ -386,6 +466,55 @@ void MainWindow::showImage(const QImage &image)
     // 用exec默认是模态，只能聚焦最后一个窗口
     imageDialog->setAttribute(Qt::WA_DeleteOnClose);
     imageDialog->show();
+}
+
+
+void MainWindow::wheelEvent(QLabel *imageLabel, QWheelEvent *event)
+{
+    // 获取 QLabel 的当前大小
+    QSize labelSize = imageLabel->size();
+
+    // 根据鼠标滚轮的滚动量调整 QLabel 的大小
+    labelSize.setWidth(labelSize.width() + event->pixelDelta().y() / 120.0 * 0.1);
+    labelSize.setHeight(labelSize.height() + event->pixelDelta().y() / 120.0 * 0.1);
+
+    // 限制 QLabel 的最小和最大大小
+    labelSize.setWidth(qMax(labelSize.width(), 100));
+    labelSize.setHeight(qMax(labelSize.height(), 100));
+
+    // 设置 QLabel 的新大小
+    imageLabel->resize(labelSize);
+}
+
+void MainWindow::mouseMoveEvent(QLabel *imageLabel, QPoint *mousePos, QMouseEvent *event)
+{
+    if (event->buttons() & Qt::LeftButton) {
+        // 获取鼠标移动的距离
+        QPoint delta = event->pos() - *mousePos;
+
+        // 移动 QLabel 的位置
+        imageLabel->move(imageLabel->pos() + delta);
+
+        // 限制 QLabel 的移动范围
+        QRect rect = this->rect();
+        imageLabel->move(
+            qBound(rect.x(), imageLabel->x(), rect.x() + rect.width() - imageLabel->width()),
+            qBound(rect.y(), imageLabel->y(), rect.y() + rect.height() - imageLabel->height())
+            );
+    }
+    *mousePos = event->pos();
+}
+
+
+void MainWindow::contextMenuEvent(QContextMenuEvent *event, QImage image)
+{
+    QMenu menu;
+    // menu.addAction("复制", [this, image]() { image.copy(); });
+    menu.addAction("另存为", [this, image]() { image.save("path/to/saved_image.png"); });
+    menu.addAction("打开所在文件夹", [this, image]() {
+        // QDesktopServices::openUrl(QUrl::fromLocalFile(image.fileName()));
+    });
+    menu.exec(event->globalPos());
 }
 
 
@@ -554,14 +683,15 @@ void MainWindow::onViewResponse(QNetworkReply* reply){
         QByteArray imageData = reply->readAll();
 
         // use image data to preview in Qt.
-        QImage image;
-        image.loadFromData(imageData);
+        // QImage image;
+        // image.loadFromData(imageData);
 
         // show image in label or other widget
-        if(!image.isNull())
+        if(!imageData.isNull())
         {
             qDebug() << "show image in label...";
-            showImage(image);
+            // showImage(image);
+            emit sendImageToImageWindow(imageData);
         }
         else
         {
@@ -575,21 +705,38 @@ void MainWindow::onViewResponse(QNetworkReply* reply){
     reply->deleteLater();
 }
 
-
-void MainWindow::sendRequestComfyUI()
-{
+void MainWindow::sendRequestComfyUI(const QString& prompt, const QString& negativePrompt) {
     QJsonObject workflowData;
     QJsonObject promptObject;
 
-    QJsonObject *node1 = new QJsonObject();
-    node1->insert("inputs", QJsonObject({{"seed",4179143560},{"steps",20},{"cfg",8},{"sampler_name","euler_ancestral"},{"scheduler","normal"},{"denoise",1}}));
-    node1->insert("class_type", "KSampler");
-    promptObject["5"]= *node1;
+    // Positive Prompt
+    QJsonObject posNode;
+    posNode["class_type"] = "CLIPTextEncode";
+    posNode["inputs"] = QJsonObject{{"text", prompt}, {"clip", "clip"}};
+    promptObject["6"] = posNode;
 
-    QJsonObject *node2 = new QJsonObject();
-    node2->insert("inputs", QJsonObject({{"text","Girl, pink hair, anime, kawaii"}, {"clip","clip"}}));
-    node2->insert("class_type", "CLIPTextEncode");
-    promptObject["6"] = *node2;
+    // Negative Prompt
+    QJsonObject negNode;
+    negNode["class_type"] = "CLIPTextEncode";
+    negNode["inputs"] = QJsonObject{{"text", negativePrompt}, {"clip", "clip"}};
+    promptObject["8"] = negNode;
+
+    // KSampler
+    QJsonObject samplerNode;
+    samplerNode["class_type"] = "KSampler";
+    samplerNode["inputs"] = QJsonObject{
+        {"seed", QDateTime::currentSecsSinceEpoch()},
+        {"steps", 20},
+        {"cfg", 8},
+        {"sampler_name", "euler_ancestral"},
+        {"scheduler", "normal"},
+        {"denoise", 1},
+        {"positive", "6"},
+        {"negative", "8"}
+    };
+    promptObject["5"] = samplerNode;
+
+    // 其他节点保持不变...
 
     QJsonObject *node3 = new QJsonObject();
     node3->insert("inputs", QJsonObject({{"samples","5"}, {"vae","vae"}}));
@@ -608,10 +755,8 @@ void MainWindow::sendRequestComfyUI()
 
     workflowData["prompt"] = promptObject;
 
-
     QJsonObject client_id_data;
     client_id_data["client_id"] = "client_id";
     workflowData["extra_options"] = client_id_data;
-
     sendWorkflow(workflowData);
 }
