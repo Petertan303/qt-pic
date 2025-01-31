@@ -48,6 +48,9 @@ private:
     void applyZoom();
     void resetImage();
     void fitToWindow();
+    void initTimer();
+    void initShortcut();
+    void initAnimation();
 
     // 成员变量
     QLabel *imageLabel;                 // 显示图片的标签
@@ -63,21 +66,12 @@ private:
     QString currentImagePath = QCoreApplication::applicationDirPath() + "/output/"; // 当前图片保存的路径
 
     double m_scale;           // 当前缩放比例
-    // double m_targetScale;     // 目标缩放比例
-    // double m_xOffset;         // 当前 X 偏移量
-    // double m_yOffset;         // 当前 Y 偏移量
-    // double m_targetXOffset;   // 目标 X 偏移量
-    // double m_targetYOffset;   // 目标 Y 偏移量
-    // QVariantAnimation *m_animation;  // 动画对象
-    // QPoint m_imageOffset;
-    qint64 m_lastWheelEventTime; // 记录上一次滚轮事件的时间戳
     int m_accumulatedDelta; // 累积的滚轮值
     QTimer *m_debounceTimer; // 防抖定时器
     bool m_isAnimating;      // 是否正在动画中
     QPixmap originalPixmap;  // 原始图片
     QPropertyAnimation *m_scaleAnimation; // 缩放动画
     QPropertyAnimation *m_scrollAnimation; // 滚动动画
-
 
     // 缩放比例属性（用于动画）
     Q_PROPERTY(double scale READ scale WRITE setScale)

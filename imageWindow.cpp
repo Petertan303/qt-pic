@@ -30,27 +30,10 @@ imageWindow::imageWindow(QWidget *parent) : QMainWindow(parent), m_scale(1.0), m
     setupImageLabel();
 
     targetScaleFactor = 1.0;
-    // 初始化定时器
-    m_debounceTimer = new QTimer(this);
-    m_debounceTimer->setSingleShot(true); // 单次触发
-    m_debounceTimer->setInterval(20);    // 20ms 延迟
-    connect(m_debounceTimer, &QTimer::timeout, this, &imageWindow::applyZoom);
 
-    // 快捷键
-    QShortcut *resetShortcut = new QShortcut(QKeySequence("Ctrl+1"), this);
-    connect(resetShortcut, &QShortcut::activated, this, &imageWindow::resetImage);
-    // 设置 Ctrl+0 快捷键
-    QShortcut *fitToWindowShortcut = new QShortcut(QKeySequence("Ctrl+0"), this);
-    connect(fitToWindowShortcut, &QShortcut::activated, this, &imageWindow::fitToWindow);
-
-    // 初始化动画
-    m_scaleAnimation = new QPropertyAnimation(this, "scale");
-    m_scaleAnimation->setDuration(300); // 动画时长 300ms
-    m_scaleAnimation->setEasingCurve(QEasingCurve::InOutQuad); // 平滑过渡
-
-    m_scrollAnimation = new QPropertyAnimation(this, "scrollValue");
-    m_scrollAnimation->setDuration(300); // 动画时长 300ms
-    m_scrollAnimation->setEasingCurve(QEasingCurve::InOutQuad); // 平滑过渡
+    initTimer();
+    initShortcut();
+    initAnimation();
 
     setWindowTitle("Image Viewer");
     // this->show();
@@ -62,6 +45,35 @@ imageWindow::~imageWindow() {
     imageLabel->deleteLater();
     scrollArea->deleteLater();
 }
+
+void imageWindow::initTimer(){
+    // 初始化定时器
+    m_debounceTimer = new QTimer(this);
+    m_debounceTimer->setSingleShot(true); // 单次触发
+    m_debounceTimer->setInterval(20);    // 20ms 延迟
+    connect(m_debounceTimer, &QTimer::timeout, this, &imageWindow::applyZoom);
+}
+
+void imageWindow::initShortcut (){
+    // 快捷键
+    QShortcut *resetShortcut = new QShortcut(QKeySequence("Ctrl+1"), this);
+    connect(resetShortcut, &QShortcut::activated, this, &imageWindow::resetImage);
+    // 设置 Ctrl+0 快捷键
+    QShortcut *fitToWindowShortcut = new QShortcut(QKeySequence("Ctrl+0"), this);
+    connect(fitToWindowShortcut, &QShortcut::activated, this, &imageWindow::fitToWindow);
+}
+
+void imageWindow::initAnimation(){
+    // 初始化动画
+    m_scaleAnimation = new QPropertyAnimation(this, "scale");
+    m_scaleAnimation->setDuration(300); // 动画时长 300ms
+    m_scaleAnimation->setEasingCurve(QEasingCurve::InOutQuad); // 平滑过渡
+
+    m_scrollAnimation = new QPropertyAnimation(this, "scrollValue");
+    m_scrollAnimation->setDuration(300); // 动画时长 300ms
+    m_scrollAnimation->setEasingCurve(QEasingCurve::InOutQuad); // 平滑过渡
+}
+
 
 // 创建右键菜单动作
 void imageWindow::createActions() {
@@ -98,14 +110,8 @@ void imageWindow::setImage(const QByteArray &newImage) {
     if (!newImage.isNull()) {
         image.loadFromData(newImage);
         originalPixmap.loadFromData(newImage);
-        // 可以不使用setpixmap，而是重写绘制窗口的函数实现缩放，但是很麻烦
-        // imageLabel->setPixmap(QPixmap::fromImage(image));
-        // // 初始，平滑缩放
-        // imageLabel->setPixmap(QPixmap::fromImage(image).scaled(
-        //     image.size() * m_scale, Qt::KeepAspectRatio, Qt::SmoothTransformation
-        //     ));
-        this->resize(600, 600);
         updateImageLabel();
+        this->resize(600, 600);
         this->show();
         update();
     } else {

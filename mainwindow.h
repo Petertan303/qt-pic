@@ -52,7 +52,6 @@ private slots:
 private:
     Ui::MainWindow *ui;
     // imageWindow *m_imageWindow;  // 添加 imageWindow 作为成员变量
-    imageWindow *m_imageWindow;  // 添加 imageWindow 作为成员变量
     starPromptWindow *m_starPromptWindow;  // StarPromptWindow 的实例
     QNetworkAccessManager *networkManager;
     ConnectionMode m_currentMode = HTTP;
@@ -82,6 +81,7 @@ private:
     void wheelEvent(QLabel *imageLabel, QWheelEvent *event);
     void mouseMoveEvent(QLabel *imageLabel, QPoint *mousePos, QMouseEvent *event);
     void contextMenuEvent(QContextMenuEvent *event, QImage image);
+    void sendImage(QByteArray &);
 
 };
 

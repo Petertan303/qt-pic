@@ -37,12 +37,10 @@ qint16 count;
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
     ui(new Ui::MainWindow),
-    m_starPromptWindow(new starPromptWindow(this)),
+    m_starPromptWindow(new starPromptWindow(this))
     // m_imageWindow(new imageWindow(this))
-    m_imageWindow(new imageWindow(this))
     // : ui(new Ui::MainWindow)
 {
-    // m_imageWindow = new imageWindow(this);
     ui->setupUi(this);
     addMenuBar();
     networkManager = new QNetworkAccessManager(this);
@@ -89,11 +87,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
     // connect(this,
     //         &MainWindow::sendImageToImageWindow,
     //         m_imageWindow,
-    //         &imageWindow::setImage);
-    connect(this,
-            &MainWindow::sendImageToImageWindow,
-            m_imageWindow,
-            &imageWindow::setImage);
+    //         &imageWindow::setImage); // 不可以这样，这样只有一个实例，只有一个窗口
 
     // connectWebSocket();
     recoverHistory();
@@ -107,7 +101,7 @@ MainWindow::~MainWindow()
     }
     delete ui;
     delete m_starPromptWindow;
-    delete m_imageWindow;
+    // delete m_imageWindow;
 }
 
 void MainWindow::connectWebSocket() {
@@ -353,7 +347,8 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
 
         // showImage(imageData);
 
-        emit sendImageToImageWindow(imageData);
+        // emit sendImageToImageWindow(imageData);
+        sendImage(imageData);
         saveHistory();
     }
     reply->deleteLater();
@@ -677,6 +672,12 @@ void MainWindow::viewImage(const QString& filename, const QString& subfolder){
     view_manager->get(*request);
 }
 
+void MainWindow::sendImage(QByteArray &imageData){
+    imageWindow *m_imageWindow = new imageWindow(this);
+    // emit sendImageToImageWindow(imageData); // 不使用信号
+    m_imageWindow->setImage(imageData);
+}
+
 void MainWindow::onViewResponse(QNetworkReply* reply){
     if (reply->error() == QNetworkReply::NoError)
     {
@@ -691,7 +692,7 @@ void MainWindow::onViewResponse(QNetworkReply* reply){
         {
             qDebug() << "show image in label...";
             // showImage(image);
-            emit sendImageToImageWindow(imageData);
+            sendImage(imageData);
         }
         else
         {
