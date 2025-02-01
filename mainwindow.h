@@ -48,6 +48,7 @@ private slots:
     void onNetworkReply(QNetworkReply* reply);
     void onClearButtonClicked();
     // void sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title);
+    void handleWebSocketError(QAbstractSocket::SocketError error);
 
 private:
     Ui::MainWindow *ui;
@@ -66,23 +67,23 @@ private:
     void connectWebSocket();
     QUrl ws_url;
     QWebSocket *m_webSocket;
+    QString m_currentTaskId;
+    QString taskId;
     void onViewResponse(QNetworkReply* reply);
     void viewImage(const QString& filename, const QString& subfolder);
     void handleExecutionComplete(const QJsonObject& outputs);
     void subscribeTask(const QString & taskId);
     void onWorkflowResponse(QNetworkReply* reply);
     void sendWorkflow(const QJsonObject& workflowData);
-    void onWebSocketTextMessageReceived(QString message);
+    void onWebSocketTextMessageReceived(const QString &message);
     void onWebSocketError(QAbstractSocket::SocketError error);
     void onWebSocketDisconnected();
     void onWebSocketConnected();
     QNetworkAccessManager *view_manager;
-    void sendRequestComfyUI(const QString& prompt, const QString& negativePrompt);
-    void wheelEvent(QLabel *imageLabel, QWheelEvent *event);
-    void mouseMoveEvent(QLabel *imageLabel, QPoint *mousePos, QMouseEvent *event);
+    void sendRequestComfyUI(const QString& prompt, const QString& negativePrompt, const QString& key);
     void contextMenuEvent(QContextMenuEvent *event, QImage image);
     void sendImage(QByteArray &);
-
+    void sendSubscribeMessage();
 };
 
 #endif // MAINWINDOW_H

@@ -37,16 +37,20 @@ qint16 count;
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
     ui(new Ui::MainWindow),
-    m_starPromptWindow(new starPromptWindow(this))
+    m_starPromptWindow(new starPromptWindow(this)),
+    m_webSocket(nullptr), // 初始化为空
+    taskId(""),
+    m_currentTaskId("empty")
     // m_imageWindow(new imageWindow(this))
     // : ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
     addMenuBar();
     networkManager = new QNetworkAccessManager(this);
+    ws_url = QUrl("ws://localhost:3457/");
 
     // statusoutputTextEdit = new QoutputTextEdit("准备发送请求...", this);
-    ui->outputTextEdit->append("启动！");
+    ui->outputTextEdit->append(QStringLiteral("启动！"));
     // ui->statusBar->addWidget(statusoutputTextEdit);  // 将 statusoutputTextEdit 添加到 statusBar
 
     QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_S), this);
@@ -64,7 +68,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
     connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
         if (m_currentMode == WebSocket) {
             sendRequestComfyUI(ui->promptTextEdit->toPlainText(),
-                               ui->negativePromptTextEdit->toPlainText());
+                               ui->negativePromptTextEdit->toPlainText(),
+                               ui->titleLineEdit->text());
         } else {
             MainWindow::draw(ui->promptTextEdit->toPlainText(),
                              ui->negativePromptTextEdit->toPlainText(),
@@ -101,33 +106,39 @@ MainWindow::~MainWindow()
     }
     delete ui;
     delete m_starPromptWindow;
-    // delete m_imageWindow;
 }
 
+// 切换到websocket模式的时候启动
 void MainWindow::connectWebSocket() {
-    if(m_webSocket) {
-        m_webSocket->close();
-        delete m_webSocket;
+    // 如果任务 ID 相同且已连接，则无需重新订阅
+    if (m_webSocket && m_webSocket->state() == QAbstractSocket::ConnectedState) {
+        if (m_currentTaskId == taskId) {
+            return;
+        }
     }
 
-    ws_url = QUrl("ws://localhost:3457/");
+    // 清理旧的 WebSocket 连接
+    if (m_webSocket) {
+        m_webSocket->close(); // 关闭连接
+        m_webSocket->deleteLater(); // 延迟删除对象
+        m_webSocket = nullptr; // 将指针置为 nullptr
+    }
     m_webSocket = new QWebSocket();
     connect(m_webSocket, &QWebSocket::connected, this, [this]() {
-        ui->outputTextEdit->append("WebSocket已连接");
+        ui->outputTextEdit->append(QStringLiteral("WebSocket已连接"));
     });
     connect(m_webSocket, &QWebSocket::disconnected, this, [this]() {
-        ui->outputTextEdit->append("WebSocket已断开");
+        ui->outputTextEdit->append(QStringLiteral("WebSocket已断开"));
     });
     connect(m_webSocket, &QWebSocket::textMessageReceived,
             this, &MainWindow::onWebSocketTextMessageReceived);
-    // connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::errorOccurred()),
-    //         this, [this](QAbstractSocket::SocketError error) {
-    //             ui->outputTextEdit->append("WebSocket错误: " + m_webSocket->errorString());
-    //         });
+    connect(m_webSocket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::errorOccurred),
+            this, &MainWindow::handleWebSocketError);
+
     m_webSocket->open(ws_url);
 }
 
-
+// http 解析数据
 std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, QString negativePrompt){
     // QString prompt = ui->promptTextEdit->toPlainText();
     // QString negativePrompt = ui->negativePromptTextEdit->toPlainText();
@@ -162,6 +173,7 @@ std::tuple<QNetworkRequest, QByteArray> MainWindow::readApiData(QString prompt, 
     return std::make_tuple(request, postData);
 }
 
+// 设置菜单栏
 void MainWindow::addMenuBar(){
     QFont ft;
     ft.setPointSize(12);
@@ -201,19 +213,18 @@ void MainWindow::addMenuBar(){
 
     connect(httpAction, &QAction::triggered, this, [this]() {
         m_currentMode = HTTP;
-        ui->outputTextEdit->append("切换到HTTP模式");
+        ui->outputTextEdit->append("");
+        ui->outputTextEdit->append(QStringLiteral("<strong>切换到HTTP模式。</strong>"));
     });
     connect(wsAction, &QAction::triggered, this, [this]() {
         m_currentMode = WebSocket;
         connectWebSocket();
-        ui->outputTextEdit->append("切换到WebSocket模式");
+        ui->outputTextEdit->append("");
+        ui->outputTextEdit->append(QStringLiteral("<strong>切换到WebSocket模式</strong>"));
     });
 }
 
-// void MainWindow::sendAddPromptToStarSignal(QString prompt, QString negativePrompt, QString title){
-//     emit addPromptToStarSignal(prompt, negativePrompt, title);
-// }
-
+// 保存最后一次绘画的prompt
 void MainWindow::saveHistory(){
     QJsonObject promptJson;
     promptJson["title"] = ui->titleLineEdit->text();
@@ -227,6 +238,7 @@ void MainWindow::saveHistory(){
     }
 }
 
+// 启动时初始化
 void MainWindow::recoverHistory(){
     QFile historyJson("./dataFile/history");
     historyJson.open(QIODevice::ReadOnly);
@@ -241,12 +253,12 @@ void MainWindow::recoverHistory(){
     ui->negativePromptTextEdit->setPlainText(jsonObject["negativePrompt"].toString());
 }
 
-
+// 清理日志窗口
 void MainWindow::onClearButtonClicked(){
     ui->outputTextEdit->clear();
 }
 
-
+// 通用加载prompt函数
 void MainWindow::loadPrompt(QString prompt, QString negativePrompt, QString title){
     ui->promptTextEdit->setPlainText(prompt);
     ui->negativePromptTextEdit->setPlainText(negativePrompt);
@@ -257,7 +269,7 @@ void MainWindow::loadPrompt(QString prompt, QString negativePrompt, QString titl
     qDebug() << "Prompt:" << prompt;
 }
 
-
+// 发送http的请求
 void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
 {
     // QString prompt = ui->promptTextEdit->toPlainText();
@@ -265,18 +277,16 @@ void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
     if(count==0){
         ui->outputTextEdit->append("");
         if (key.isEmpty())
-            ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始画图...</strong>"));
+            ui->outputTextEdit->append(QStringLiteral("<strong>开始画图...</strong>"));
         else
-            ui->outputTextEdit->insertHtml(QStringLiteral("<strong>开始绘制")\
-                                                          + key\
-                                                          + "...</strong>");
+            ui->outputTextEdit->append(QStringLiteral("<strong>开始绘制</strong>")\
+                                           + key\
+                                           + "<strong>...</strong>");
     }
     else{
-        // ui->outputTextEdit->append("有 " + QString::number(count) + " 张在等待...");
-        ui->outputTextEdit->append("");
-        ui->outputTextEdit->insertHtml(QStringLiteral("<p>有<strong> ")\
+        ui->outputTextEdit->append(QStringLiteral("有<strong> ")\
                                        + QString::number(count)\
-                                       + " </strong>张在等待...</p>");
+                                       + QStringLiteral(" </strong>张在等待..."));
     }
     count ++;
     auto [request, postData] = readApiData(prompt, negativePrompt);
@@ -294,9 +304,10 @@ void MainWindow::draw(QString prompt, QString negativePrompt, QString key)
     // networkManager->deleteLater();
 }
 
+// http的请求
 void MainWindow::onNetworkReply(QNetworkReply* reply)
 {
-    qDebug() << "network replied.";
+    qDebug() << "http network replied.";
 
     count--;
     if (reply->error() != QNetworkReply::NoError) {
@@ -324,15 +335,17 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
 
     if (!images.isEmpty()) {
         if(count!=0){
-            ui->outputTextEdit->append("");
-            ui->outputTextEdit->insertHtml(QStringLiteral("<p>接下来还有<strong> ")\
+            // ui->outputTextEdit->append("");
+            ui->outputTextEdit->append(QStringLiteral(""));
+            ui->outputTextEdit->append(QStringLiteral("接下来还有<strong> ")\
                                            + QString::number(count)\
-                                           + QStringLiteral(" </front>张...</p>"));
+                                           + QStringLiteral(" </strong>张..."));
+                                           // + QStringLiteral(" </front>张..."));
         }
         else{
-            ui->outputTextEdit->append("");
-            ui->outputTextEdit->insertHtml("<strong>画图完成！</strong>");
-            ui->outputTextEdit->append(" ");
+            // ui->outputTextEdit->append("");
+            ui->outputTextEdit->append(QStringLiteral("<strong>画图完成！</strong>"));
+            // ui->outputTextEdit->append(" ");
         }
         QByteArray imageData = QByteArray::fromBase64(images[0].toString().toUtf8());
 
@@ -354,10 +367,7 @@ void MainWindow::onNetworkReply(QNetworkReply* reply)
     reply->deleteLater();
 }
 
-// void MainWindow::onSendImage(){
-//     return;
-// }
-
+// 存图到本地
 void MainWindow::saveImageAndJson(const QByteArray &imageData, const QJsonObject &jsonResponse)
 {
     QJsonObject jsonObj = QJsonDocument(jsonResponse).object();
@@ -393,10 +403,12 @@ void MainWindow::saveImageAndJson(const QByteArray &imageData, const QJsonObject
     return;
 }
 
+// 显示星标prompt窗口
 void MainWindow::showStarPrompts(){
     m_starPromptWindow->showStarPrompts();
 }
 
+// 本来的显示图片函数
 void MainWindow::showImage(const QByteArray &imageData)
 {
     // 创建一个新的对话框来显示图片
@@ -429,7 +441,7 @@ void MainWindow::showImage(const QByteArray &imageData)
     imageDialog->show();
 }
 
-
+// 同上
 void MainWindow::showImage(const QImage &image)
 {
     qDebug() << "showing img...";
@@ -464,43 +476,6 @@ void MainWindow::showImage(const QImage &image)
 }
 
 
-void MainWindow::wheelEvent(QLabel *imageLabel, QWheelEvent *event)
-{
-    // 获取 QLabel 的当前大小
-    QSize labelSize = imageLabel->size();
-
-    // 根据鼠标滚轮的滚动量调整 QLabel 的大小
-    labelSize.setWidth(labelSize.width() + event->pixelDelta().y() / 120.0 * 0.1);
-    labelSize.setHeight(labelSize.height() + event->pixelDelta().y() / 120.0 * 0.1);
-
-    // 限制 QLabel 的最小和最大大小
-    labelSize.setWidth(qMax(labelSize.width(), 100));
-    labelSize.setHeight(qMax(labelSize.height(), 100));
-
-    // 设置 QLabel 的新大小
-    imageLabel->resize(labelSize);
-}
-
-void MainWindow::mouseMoveEvent(QLabel *imageLabel, QPoint *mousePos, QMouseEvent *event)
-{
-    if (event->buttons() & Qt::LeftButton) {
-        // 获取鼠标移动的距离
-        QPoint delta = event->pos() - *mousePos;
-
-        // 移动 QLabel 的位置
-        imageLabel->move(imageLabel->pos() + delta);
-
-        // 限制 QLabel 的移动范围
-        QRect rect = this->rect();
-        imageLabel->move(
-            qBound(rect.x(), imageLabel->x(), rect.x() + rect.width() - imageLabel->width()),
-            qBound(rect.y(), imageLabel->y(), rect.y() + rect.height() - imageLabel->height())
-            );
-    }
-    *mousePos = event->pos();
-}
-
-
 void MainWindow::contextMenuEvent(QContextMenuEvent *event, QImage image)
 {
     QMenu menu;
@@ -523,18 +498,6 @@ void MainWindow::showError(const QString &errorString)
     // errorDialog.show(); //将会闪一下就消失
 }
 
-
-// void MainWindow::showError(const QString &errorString)
-// {
-//     // ErrorDialog errorDialog(this);
-//     QErrorMessage errorDialog(this);
-//     errorDialog.showMessage(errorString);  // 设置错误信息
-//     // errorDialog.setAttribute(Qt::WA_DeleteOnClose);
-//     errorDialog.exec();  // 显示窗口
-//     // errorDialog.show(); //将会闪一下就消失
-// }
-
-
 void MainWindow::onWebSocketConnected() {
     qDebug() << "WebSocket connected.";
     // You can send subscribe message here if you already have task_id
@@ -545,90 +508,160 @@ void MainWindow::onWebSocketDisconnected() {
 }
 
 
+void MainWindow::handleWebSocketError(QAbstractSocket::SocketError error) {
+    Q_UNUSED(error)
+    ui->outputTextEdit->append("\nWebSocket错误: " + m_webSocket->errorString());
+}
+
 void MainWindow::onWebSocketError(QAbstractSocket::SocketError error)
 {
     qDebug() << "websocket error: " << error;
 }
 
-void MainWindow::onWebSocketTextMessageReceived(QString message) {
-    qDebug() << "WebSocket message received:" << message;
+// websocket的api收到json或者纯文本
+void MainWindow::onWebSocketTextMessageReceived(const QString &message) {
+    qDebug() << "websocket network replied.";
+    count--;
+
     QJsonDocument jsonDoc = QJsonDocument::fromJson(message.toUtf8());
-    if(jsonDoc.isObject())
-    {
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        ui->outputTextEdit->append("无效的 JSON 消息");
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 处理不同类型的消息
+    if (jsonObj.contains("type")) {
+        QString msgType = jsonObj["type"].toString();
+        if (msgType == "status") {
+            QJsonObject statusData = jsonObj["data"].toObject();
+            QString status = statusData["status"].toString();
+            ui->outputTextEdit->append("任务状态: " + status);
+        } else if (msgType == "execution_complete") {
+            QJsonObject outputs = jsonObj["data"].toObject()["outputs"].toObject();
+            handleExecutionComplete(outputs);
+        } else if (msgType == "progress") {
+            QJsonObject progressData = jsonObj["data"].toObject();
+            int value = progressData["value"].toInt();
+            int max = progressData["max"].toInt();
+            ui->outputTextEdit->append("任务进度: " + QString::number(value) + "/" + QString::number(max));
+        }
+    } else if (jsonObj.contains("prompt_id")) {
+        // 处理任务 ID
+        QString taskId = jsonObj["prompt_id"].toString();
+        ui->outputTextEdit->append("收到任务 ID: " + taskId);
+        subscribeTask(taskId); // 订阅任务更新
+    } else if (jsonObj.contains("images")){
+        QJsonArray images = jsonObj["images"].toArray();
+        QByteArray imageData = QByteArray::fromBase64(images[0].toString().toUtf8());
+        if (!imageData.isEmpty()){
+            sendImage(imageData), qDebug() << "image get!";
+            if(count!=0){
+                // ui->outputTextEdit->append("");
+                ui->outputTextEdit->append(QStringLiteral(""));
+                ui->outputTextEdit->append(QStringLiteral("接下来还有<strong> ")\
+                                               + QString::number(count)\
+                                               + QStringLiteral(" </strong>张..."));
+                // + QStringLiteral(" </front>张..."));
+            }
+            else{
+                // ui->outputTextEdit->append("");
+                ui->outputTextEdit->append(QStringLiteral("<strong>画图完成！</strong>"));
+                // ui->outputTextEdit->append(" ");
+            }
+            saveHistory();
+        }
+    }
+}
+
+// comfyui用
+void MainWindow::sendWorkflow(const QJsonObject& workflowData) {
+    // 检查 WebSocket 连接状态
+    if (!m_webSocket || m_webSocket->state() != QAbstractSocket::ConnectedState) {
+        ui->outputTextEdit->append(QStringLiteral("WebSocket 未连接，无法发送工作流"));
+        return;
+    }
+
+    // 将工作流数据转换为 JSON 字符串
+    QJsonDocument doc(workflowData);
+    QString jsonString = doc.toJson(QJsonDocument::Compact);
+
+    // 发送工作流数据
+    m_webSocket->sendTextMessage(jsonString);
+
+    // 如果需要，可以在这里处理任务 ID
+    if (workflowData.contains("prompt_id")) {
+        QString taskId = workflowData["prompt_id"].toString();
+        subscribeTask(taskId); // 订阅任务更新
+    }
+}
+
+void MainWindow::onWorkflowResponse(QNetworkReply* reply) {
+    if (reply->error() != QNetworkReply::NoError) {
+        ui->outputTextEdit->append(QStringLiteral("工作流请求错误: ") + reply->errorString() + QStringLiteral(""));
+        reply->deleteLater();
+        return;
+    }
+
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(reply->readAll());
+    if (jsonDoc.isObject()) {
         QJsonObject jsonObj = jsonDoc.object();
-        if(jsonObj.contains("type"))
-        {
-            QString msgType = jsonObj["type"].toString();
-            if(msgType == "status")
-            {
-                QJsonObject statusData = jsonObj["data"].toObject();
-                qDebug() << "Task Status:" << statusData["status"].toString();
-            }
-            else if(msgType == "execution_complete")
-            {
-                QJsonObject outputs = jsonObj["data"].toObject()["outputs"].toObject();
-                qDebug() << "execution_complete, output is " << outputs;
-
-                // Process image data here and call view image.
-                handleExecutionComplete(outputs);
-            }
-            else if(msgType == "progress")
-            {
-                QJsonObject progressData = jsonObj["data"].toObject();
-                qDebug() << "Task Progress:" << progressData["value"].toInt() << "/" << progressData["max"].toInt();
-            }
-
+        if (jsonObj.contains("images")) {
+            QJsonArray images = jsonObj["images"].toArray();
+            QByteArray imageData = QByteArray::fromBase64(images[0].toString().toUtf8());
+            if (!imageData.isEmpty())
+                sendImage(imageData), qDebug() << "image get!";
+            else qDebug() << "image is null";
+        }
+        if (jsonObj.contains("prompt_id")) {
+            QString newTaskId = jsonObj["prompt_id"].toString();
+            subscribeTask(newTaskId);
+        } else if (jsonObj.contains("error")) {
+            ui->outputTextEdit->append(QStringLiteral("API错误: ")
+                                           + jsonObj["error"].toObject()["message"].toString()
+                                           + QStringLiteral(""));
         }
     }
-}
-
-
-void MainWindow::sendWorkflow(const QJsonObject& workflowData){
-    networkManager = new QNetworkAccessManager();
-    connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onWorkflowResponse);
-
-    QNetworkRequest request(QUrl("http://127.0.0.1:8188/prompt")); // 替换为你的ComfyUI地址
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    QByteArray jsonData = QJsonDocument(workflowData).toJson();
-    networkManager->post(request, jsonData);
-}
-
-void MainWindow::onWorkflowResponse(QNetworkReply* reply){
-    if (reply->error() == QNetworkReply::NoError)
-    {
-        QByteArray responseData = reply->readAll();
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(responseData);
-        if(jsonDoc.isObject())
-        {
-            QJsonObject jsonObj = jsonDoc.object();
-            if(jsonObj.contains("prompt_id"))
-            {
-                QString taskId = jsonObj["prompt_id"].toString();
-                qDebug() << "Task ID: " << taskId;
-                subscribeTask(taskId);
-            }
-        }
-
-    }
-    else
-    {
-        qDebug() << "Request failed with error:" << reply->errorString();
-    }
-
     reply->deleteLater();
 }
 
 
-void MainWindow::subscribeTask(const QString & taskId){
-    QJsonObject subscribeMessage;
-    subscribeMessage["type"] = "subscribe";
-    subscribeMessage["task_id"] = taskId;
+void MainWindow::subscribeTask(const QString &taskId) {
+    if (taskId.isEmpty()) {
+        ui->outputTextEdit->append(QStringLiteral("任务 ID 为空，无法订阅"));
+        return;
+    } else
+        ui->outputTextEdit->append(QStringLiteral("任务 ID 为")
+                                       + taskId
+                                       + QStringLiteral(""));
 
-    if (m_webSocket && m_webSocket->isValid()) {
-        m_webSocket->sendTextMessage(QJsonDocument(subscribeMessage).toJson());
-    } else {
-        qDebug() << "Websocket is not valid, can't subscribe task!";
+    if (!m_webSocket || m_webSocket->state() != QAbstractSocket::ConnectedState) {
+        ui->outputTextEdit->append(QStringLiteral("WebSocket 未连接，无法订阅任务"));
+        return;
     }
+
+    // 构造订阅消息
+    QJsonObject subMsg{
+        {"action", "subscribe"},
+        {"task_id", taskId}
+    };
+
+    // 发送订阅消息
+    m_webSocket->sendTextMessage(QJsonDocument(subMsg).toJson());
+    ui->outputTextEdit->append(QStringLiteral("已订阅任务: ") + taskId + QStringLiteral(""));
+}
+
+void MainWindow::sendSubscribeMessage()
+{
+    if (!m_webSocket || m_webSocket->state() != QAbstractSocket::ConnectedState) return;
+
+    QJsonObject subMsg{
+        {"action", "subscribe"},
+        {"task_id", m_currentTaskId}
+    };
+    m_webSocket->sendTextMessage(QJsonDocument(subMsg).toJson());
+    ui->outputTextEdit->append(QStringLiteral("已订阅任务: ") + m_currentTaskId + QStringLiteral(""));
 }
 
 void MainWindow::handleExecutionComplete(const QJsonObject& outputs)
@@ -662,7 +695,7 @@ void MainWindow::handleExecutionComplete(const QJsonObject& outputs)
     }
 }
 
-
+// comfyui用
 void MainWindow::viewImage(const QString& filename, const QString& subfolder){
     QNetworkAccessManager *view_manager = new QNetworkAccessManager();
     connect(view_manager, &QNetworkAccessManager::finished, this, &MainWindow::onViewResponse);
@@ -672,6 +705,7 @@ void MainWindow::viewImage(const QString& filename, const QString& subfolder){
     view_manager->get(*request);
 }
 
+// 显示图片
 void MainWindow::sendImage(QByteArray &imageData){
     imageWindow *m_imageWindow = new imageWindow(this);
     // emit sendImageToImageWindow(imageData); // 不使用信号
@@ -706,7 +740,9 @@ void MainWindow::onViewResponse(QNetworkReply* reply){
     reply->deleteLater();
 }
 
-void MainWindow::sendRequestComfyUI(const QString& prompt, const QString& negativePrompt) {
+// 构建工作流请求
+void MainWindow::sendRequestComfyUI(const QString& prompt, const QString& negativePrompt, const QString& key) {
+    // 构造工作流数据
     QJsonObject workflowData;
     QJsonObject promptObject;
 
@@ -738,26 +774,40 @@ void MainWindow::sendRequestComfyUI(const QString& prompt, const QString& negati
     promptObject["5"] = samplerNode;
 
     // 其他节点保持不变...
+    QJsonObject node3;
+    node3["inputs"] = QJsonObject{{"samples", "5"}, {"vae", "vae"}};
+    node3["class_type"] = "VAEDecode";
+    promptObject["7"] = node3;
 
-    QJsonObject *node3 = new QJsonObject();
-    node3->insert("inputs", QJsonObject({{"samples","5"}, {"vae","vae"}}));
-    node3->insert("class_type", "VAEDecode");
-    promptObject["7"] = *node3;
+    QJsonObject node4;
+    node4["inputs"] = QJsonObject{{"model", "model"}, {"positive", "6"}, {"negative", "6"}, {"latent_image", "latent_image"}};
+    node4["class_type"] = "ApplyLora";
+    promptObject["9"] = node4;
 
-    QJsonObject *node4 = new QJsonObject();
-    node4->insert("inputs", QJsonObject({{"model","model"},{"positive","6"},{"negative","6"}, {"latent_image", "latent_image"}}));
-    node4->insert("class_type", "ApplyLora");
-    promptObject["9"] = *node4;
-
-    QJsonObject *node5 = new QJsonObject();
-    node5->insert("inputs", QJsonObject({{"images","7"}}));
-    node5->insert("class_type", "SaveImage");
-    promptObject["11"] = *node5;
+    QJsonObject node5;
+    node5["inputs"] = QJsonObject{{"images", "7"}};
+    node5["class_type"] = "SaveImage";
+    promptObject["11"] = node5;
 
     workflowData["prompt"] = promptObject;
 
-    QJsonObject client_id_data;
-    client_id_data["client_id"] = "client_id";
-    workflowData["extra_options"] = client_id_data;
+    if(count==0){
+        ui->outputTextEdit->append("");
+        if (key.isEmpty())
+            ui->outputTextEdit->append(QStringLiteral("<strong>开始画图...</strong>"));
+        else
+            ui->outputTextEdit->append(QStringLiteral("<strong>开始绘制</strong>")\
+                                           + key\
+                                           + QStringLiteral("<strong>...</strong>"));
+    }
+    else{
+        ui->outputTextEdit->append(QStringLiteral("有<strong> ")\
+                                       + QString::number(count)\
+                                       + QStringLiteral(" </strong>张在等待..."));
+    }
+    count ++;
+
+
+    // 发送工作流数据
     sendWorkflow(workflowData);
 }
