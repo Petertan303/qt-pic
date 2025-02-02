@@ -31,32 +31,51 @@
 #include <QWebSocketServer>
 #include <QFileDialog>
 #include <QActionGroup>
-#include "imageWindow.h"
 
 qint16 count;
+// static QMap<QString, MainWindow::ConnectionMode> modeToString;
+// static QMap<MainWindow::ConnectionMode, QString> stringToMode;
 
-MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
-    ui(new Ui::MainWindow),
-    m_starPromptWindow(new starPromptWindow(this)),
-    m_webSocket(nullptr), // 初始化为空
-    taskId(""),
-    m_currentTaskId("empty")
-    // m_imageWindow(new imageWindow(this))
-    // : ui(new Ui::MainWindow)
+MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 {
+    initAll();
+    initConnection();
+}
+
+MainWindow::~MainWindow()
+{
+    if(m_webSocket) {
+        m_webSocket->close();
+        delete m_webSocket;
+    }
+    delete ui;
+    delete m_starPromptWindow;
+}
+
+void MainWindow::initAll(){
+    ui = new Ui::MainWindow;
+    // modeToString = mapModeToString();
+    // stringToMode = mapStringToMode();
+    // m_currentMode = ConnectionMode::HTTP;
+    m_starPromptWindow = new starPromptWindow(this);
+    m_webSocket = nullptr; // 初始化为空
+    taskId = "";
+    m_currentTaskId = "empty";
     ui->setupUi(this);
-    addMenuBar();
     networkManager = new QNetworkAccessManager(this);
     ws_url = QUrl("ws://localhost:3457/");
-
-    // statusoutputTextEdit = new QoutputTextEdit("准备发送请求...", this);
+    recoverHistory();
+    addMenuBar();
     ui->outputTextEdit->append(QStringLiteral("启动！"));
-    // ui->statusBar->addWidget(statusoutputTextEdit);  // 将 statusoutputTextEdit 添加到 statusBar
+}
 
-    QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_S), this);
+// 连接按钮、方法，或者说信号、槽
+void MainWindow::initConnection(){
+    QShortcut *shortcutDraw = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), this);
     connect(shortcutDraw, &QShortcut::activated, ui->sendRequestButton, &QPushButton::click);
     QShortcut *shortcutSaveHistory = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_S), this);
     connect(ui->ClearButton, &QPushButton::clicked, this, &MainWindow::onClearButtonClicked);
+
     connect(shortcutSaveHistory, &QShortcut::activated, this, &MainWindow::saveHistory);
     // connect(ui->ClearButton, &QPushButton::clicked, this, &ui->outputTextEdit->clear);
 
@@ -66,14 +85,21 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
     //                      ui->titleLineEdit->text());
     // });
     connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
-        if (m_currentMode == WebSocket) {
-            sendRequestComfyUI(ui->promptTextEdit->toPlainText(),
-                               ui->negativePromptTextEdit->toPlainText(),
-                               ui->titleLineEdit->text());
-        } else {
-            MainWindow::draw(ui->promptTextEdit->toPlainText(),
-                             ui->negativePromptTextEdit->toPlainText(),
-                             ui->titleLineEdit->text());
+        switch(m_currentMode){
+            case ConnectionMode::WebSocket:
+                MainWindow::sendRequestComfyUI(ui->promptTextEdit->toPlainText(),
+                                   ui->negativePromptTextEdit->toPlainText(),
+                                   ui->titleLineEdit->text());
+                break;
+            case ConnectionMode::HTTP:
+                MainWindow::draw(ui->promptTextEdit->toPlainText(),
+                                 ui->negativePromptTextEdit->toPlainText(),
+                                 ui->titleLineEdit->text());
+                break;
+            case ConnectionMode::UnknownMode:
+                ui->outputTextEdit->append("未能成功连接。");
+                break;
+            // case:break;
         }
     });
     connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onNetworkReply);
@@ -88,24 +114,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent),
             &starPromptWindow::loadPromptSignal,
             this,
             &MainWindow::loadPrompt);
-
-    // connect(this,
-    //         &MainWindow::sendImageToImageWindow,
-    //         m_imageWindow,
-    //         &imageWindow::setImage); // 不可以这样，这样只有一个实例，只有一个窗口
-
-    // connectWebSocket();
-    recoverHistory();
-}
-
-MainWindow::~MainWindow()
-{
-    if(m_webSocket) {
-        m_webSocket->close();
-        delete m_webSocket;
-    }
-    delete ui;
-    delete m_starPromptWindow;
 }
 
 // 切换到websocket模式的时候启动
@@ -209,24 +217,41 @@ void MainWindow::addMenuBar(){
     modeGroup->addAction(wsAction);
     modeMenu->addAction(httpAction);
     modeMenu->addAction(wsAction);
-    httpAction->setChecked(true); // 默认选择HTTP
+    // httpAction->setChecked(true); // 默认选择HTTP
 
     connect(httpAction, &QAction::triggered, this, [this]() {
-        m_currentMode = HTTP;
+        m_currentMode = ConnectionMode::HTTP;
         ui->outputTextEdit->append("");
         ui->outputTextEdit->append(QStringLiteral("<strong>切换到HTTP模式。</strong>"));
     });
     connect(wsAction, &QAction::triggered, this, [this]() {
-        m_currentMode = WebSocket;
+        m_currentMode = ConnectionMode::WebSocket;
         connectWebSocket();
         ui->outputTextEdit->append("");
         ui->outputTextEdit->append(QStringLiteral("<strong>切换到WebSocket模式</strong>"));
     });
+
+    switch(m_currentMode){
+    case ConnectionMode::WebSocket:
+        if(!m_webSocket) connectWebSocket();
+        wsAction->setChecked(true);
+        break;
+    case ConnectionMode::HTTP:
+        httpAction->setChecked(true);
+        break;
+    case ConnectionMode::UnknownMode:
+        m_currentMode = ConnectionMode::HTTP;
+        httpAction->setChecked(true);
+        break;
+        // case:break;
+    }
 }
 
 // 保存最后一次绘画的prompt
 void MainWindow::saveHistory(){
     QJsonObject promptJson;
+    promptJson["mode"] = mapModeToString(m_currentMode);
+    // promptJson["mode"] = #m_currentMode; // #只能在宏定义里使用
     promptJson["title"] = ui->titleLineEdit->text();
     promptJson["prompt"] = ui->promptTextEdit->toPlainText();
     promptJson["negativePrompt"] = ui->negativePromptTextEdit->toPlainText();
@@ -248,6 +273,7 @@ void MainWindow::recoverHistory(){
     QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData);
     QJsonObject jsonObject = jsonDoc.object();
 
+    m_currentMode = mapStringToMode(jsonObject["mode"].toString());
     ui->titleLineEdit->setText(jsonObject["title"].toString());
     ui->promptTextEdit->setPlainText(jsonObject["prompt"].toString());
     ui->negativePromptTextEdit->setPlainText(jsonObject["negativePrompt"].toString());
@@ -577,6 +603,9 @@ void MainWindow::onWebSocketTextMessageReceived(const QString &message) {
 
 // comfyui用
 void MainWindow::sendWorkflow(const QJsonObject& workflowData) {
+    if (!m_webSocket){
+        connectWebSocket();
+    }
     // 检查 WebSocket 连接状态
     if (!m_webSocket || m_webSocket->state() != QAbstractSocket::ConnectedState) {
         ui->outputTextEdit->append(QStringLiteral("WebSocket 未连接，无法发送工作流"));

@@ -31,10 +31,22 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    enum ConnectionMode {
-        HTTP,
-        WebSocket
+
+    #define CONNECTION_MODE_MAP(XX) \
+        XX(HTTP) \
+            XX(WebSocket) \
+            XX(SomeOtherMode) \
+
+            enum ConnectionMode {
+    #define XX(name) name,
+                CONNECTION_MODE_MAP(XX)
+    #undef XX
+                UnknownMode // 添加一个未知模式的默认值
     };
+    // enum ConnectionMode {
+    //     HTTP,
+    //     WebSocket
+    // };
 
 signals:
     void sendImageToImageWindow(const QByteArray &image);  // 定义信号，用于发送 QImage
@@ -55,7 +67,7 @@ private:
     // imageWindow *m_imageWindow;  // 添加 imageWindow 作为成员变量
     starPromptWindow *m_starPromptWindow;  // StarPromptWindow 的实例
     QNetworkAccessManager *networkManager;
-    ConnectionMode m_currentMode = HTTP;
+    ConnectionMode m_currentMode;
     // QLabel *statusLabel;  // 显示请求状态的标签
     void showStarPrompts();
     void saveImageAndJson(const QByteArray &imageData, const QJsonObject &jsonResponse);
@@ -84,6 +96,48 @@ private:
     void contextMenuEvent(QContextMenuEvent *event, QImage image);
     void sendImage(QByteArray &);
     void sendSubscribeMessage();
+    void initAll();
+    void initConnection();
+
+    // 从枚举类型到字符串
+    // QMap<QString, ConnectionMode> mapModeToString() {
+    //     QMap<QString, ConnectionMode> map;
+    // #define XX(name) map[#name] = ConnectionMode::name;
+    //         CONNECTION_MODE_MAP(XX)
+    // #undef XX
+    //         return map;
+    // }
+
+    QString mapModeToString(ConnectionMode mode) {
+        static QMap<ConnectionMode, QString> modeToStringMap = [] {
+            QMap<ConnectionMode, QString> map;
+#define XX(name) map[ConnectionMode::name] = #name;
+            CONNECTION_MODE_MAP(XX)
+#undef XX
+            return map;
+        }();
+
+        if (modeToStringMap.contains(mode)) {
+            return modeToStringMap[mode];
+        }
+        return "UnknownMode";
+    }
+
+    // 从字符串到枚举类型
+    ConnectionMode mapStringToMode(const QString& modeString) {
+        static QMap<QString, ConnectionMode> stringToModeMap = [] {
+            QMap<QString, ConnectionMode> map;
+#define XX(name) map[#name] = ConnectionMode::name;
+            CONNECTION_MODE_MAP(XX)
+#undef XX
+            return map;
+        }();
+
+        if (stringToModeMap.contains(modeString)) {
+            return stringToModeMap[modeString];
+        }
+        return ConnectionMode::UnknownMode;
+    }
 };
 
 #endif // MAINWINDOW_H
