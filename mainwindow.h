@@ -33,11 +33,12 @@ public:
     ~MainWindow();
 
     #define CONNECTION_MODE_MAP(XX) \
-        XX(HTTP) \
-            XX(WebSocket) \
-            XX(SomeOtherMode) \
+        XX(Default) \
+        XX(WebUI) \
+        XX(WebSocket) \
+        XX(ComfyUI) \
 
-            enum ConnectionMode {
+    enum ConnectionMode {
     #define XX(name) name,
                 CONNECTION_MODE_MAP(XX)
     #undef XX
@@ -68,6 +69,7 @@ private:
     starPromptWindow *m_starPromptWindow;  // StarPromptWindow 的实例
     QNetworkAccessManager *networkManager;
     ConnectionMode m_currentMode;
+    qint16 count;
     // QLabel *statusLabel;  // 显示请求状态的标签
     void showStarPrompts();
     void saveImageAndJson(const QByteArray &imageData, const QJsonObject &jsonResponse);
@@ -81,6 +83,7 @@ private:
     QWebSocket *m_webSocket;
     QString m_currentTaskId;
     QString taskId;
+    QString clientId;
     void onViewResponse(QNetworkReply* reply);
     void viewImage(const QString& filename, const QString& subfolder);
     void handleExecutionComplete(const QJsonObject& outputs);
@@ -98,6 +101,7 @@ private:
     void sendSubscribeMessage();
     void initAll();
     void initConnection();
+
 
     // 从枚举类型到字符串
     // QMap<QString, ConnectionMode> mapModeToString() {

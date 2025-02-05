@@ -32,7 +32,6 @@
 #include <QFileDialog>
 #include <QActionGroup>
 
-qint16 count;
 // static QMap<QString, MainWindow::ConnectionMode> modeToString;
 // static QMap<MainWindow::ConnectionMode, QString> stringToMode;
 
@@ -56,13 +55,13 @@ void MainWindow::initAll(){
     ui = new Ui::MainWindow;
     // modeToString = mapModeToString();
     // stringToMode = mapStringToMode();
-    // m_currentMode = ConnectionMode::HTTP;
+    // m_currentMode = ConnectionMode::Default;
     m_starPromptWindow = new starPromptWindow(this);
+    networkManager = new QNetworkAccessManager(this);
+    ui->setupUi(this);
     m_webSocket = nullptr; // 初始化为空
     taskId = "";
     m_currentTaskId = "empty";
-    ui->setupUi(this);
-    networkManager = new QNetworkAccessManager(this);
     ws_url = QUrl("ws://localhost:3457/");
     recoverHistory();
     addMenuBar();
@@ -86,15 +85,17 @@ void MainWindow::initConnection(){
     // });
     connect(ui->sendRequestButton, &QPushButton::clicked, this, [this]() {
         switch(m_currentMode){
+            case ConnectionMode::Default:
+            case ConnectionMode::ComfyUI:
+            case ConnectionMode::WebUI:
+                MainWindow::draw(ui->promptTextEdit->toPlainText(),
+                                 ui->negativePromptTextEdit->toPlainText(),
+                                 ui->titleLineEdit->text());
+                break;
             case ConnectionMode::WebSocket:
                 MainWindow::sendRequestComfyUI(ui->promptTextEdit->toPlainText(),
                                    ui->negativePromptTextEdit->toPlainText(),
                                    ui->titleLineEdit->text());
-                break;
-            case ConnectionMode::HTTP:
-                MainWindow::draw(ui->promptTextEdit->toPlainText(),
-                                 ui->negativePromptTextEdit->toPlainText(),
-                                 ui->titleLineEdit->text());
                 break;
             case ConnectionMode::UnknownMode:
                 ui->outputTextEdit->append("未能成功连接。");
@@ -108,8 +109,27 @@ void MainWindow::initConnection(){
 
     connect(m_starPromptWindow,
             &starPromptWindow::drawSignal,
-            this,
-            &MainWindow::draw);
+            this, // 方括号：捕获的变量；圆括号：传递的变量或者说参数
+            [this](QString prompt, QString negativePrompt, QString key) {
+                switch(m_currentMode){
+                case ConnectionMode::Default:
+                case ConnectionMode::ComfyUI:
+                case ConnectionMode::WebUI:
+                    MainWindow::draw(prompt,
+                                     negativePrompt,
+                                     key);
+                    break;
+                case ConnectionMode::WebSocket:
+                    MainWindow::sendRequestComfyUI(prompt,
+                                                   negativePrompt,
+                                                   key);
+                    break;
+                case ConnectionMode::UnknownMode:
+                    ui->outputTextEdit->append("未能成功连接。");
+                    break;
+                    // case:break;
+                }
+            });
     connect(m_starPromptWindow,
             &starPromptWindow::loadPromptSignal,
             this,
@@ -220,7 +240,7 @@ void MainWindow::addMenuBar(){
     // httpAction->setChecked(true); // 默认选择HTTP
 
     connect(httpAction, &QAction::triggered, this, [this]() {
-        m_currentMode = ConnectionMode::HTTP;
+        m_currentMode = ConnectionMode::Default;
         ui->outputTextEdit->append("");
         ui->outputTextEdit->append(QStringLiteral("<strong>切换到HTTP模式。</strong>"));
     });
@@ -232,15 +252,15 @@ void MainWindow::addMenuBar(){
     });
 
     switch(m_currentMode){
+    case ConnectionMode::Default:
+        httpAction->setChecked(true);
+        break;
     case ConnectionMode::WebSocket:
         if(!m_webSocket) connectWebSocket();
         wsAction->setChecked(true);
         break;
-    case ConnectionMode::HTTP:
-        httpAction->setChecked(true);
-        break;
     case ConnectionMode::UnknownMode:
-        m_currentMode = ConnectionMode::HTTP;
+        m_currentMode = ConnectionMode::Default;
         httpAction->setChecked(true);
         break;
         // case:break;
