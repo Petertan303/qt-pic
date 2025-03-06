@@ -32,7 +32,7 @@
 #include <QFileDialog>
 #include <QActionGroup>
 #include <QUrlQuery>
-
+#include "configDialog.h"
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent)
 {
@@ -123,6 +123,9 @@ void MainWindow::readApiData(){
             }
             requestMap.insert(stringToMode[value["name"].toString()], request);
             postDataMap.insert(stringToMode[value["name"].toString()], postData);
+            // if(value["name"]=="WebUI"){
+            //     qDebug() << value["body"];
+            // }
         }
     }
 
@@ -330,6 +333,15 @@ void MainWindow::addMenuBar(){
         break;
         // case:break;
     }
+
+    QMenu *configMenu = menuBar->addMenu("&Config");
+    configMenu->setFont(ft);
+    QActionGroup *configGroup = new QActionGroup(this);
+    QAction *configAction = new QAction("Config", this);
+    connect(configAction, &QAction::triggered, this, &MainWindow::showConfigDialog);
+    configGroup->addAction(configAction);
+    configMenu->addAction(configAction);
+
 }
 
 // 保存最后一次绘画的prompt
@@ -403,6 +415,7 @@ void MainWindow::beginDrawProcess(QString prompt, QString negativePrompt, QStrin
     QByteArray postData = postDataMap[m_currentMode];
     QNetworkRequest request = requestMap[m_currentMode];
 
+    // qDebug() << postData;
 
     switch (m_currentMode) {
     case Default:
@@ -423,6 +436,8 @@ void MainWindow::beginDrawProcess(QString prompt, QString negativePrompt, QStrin
     QUrl url = request.url();
     url.setPath("/prompt");
     request.setUrl(url);
+
+    qDebug() << postData;
 
     QNetworkReply *reply = m_httpNetworkManager->post(request, postData);
     connect(reply, &QNetworkReply::finished, [=](){
@@ -445,7 +460,7 @@ void MainWindow::onNetworkReply(QString title, QString prompt, QString negativeP
     }
     QByteArray responseData = reply->readAll();
 
-    qDebug() << responseData;
+    // qDebug() << responseData;
 
     QJsonDocument jsonResponse;
     QJsonObject jsonObj;
@@ -735,10 +750,10 @@ void MainWindow::onWebSocketMessageReceived(const QString &message) {
         } else if (msgType == "progress") {
             // 生成过程中的消息
             // 还有附带预览图的二进制响应
-            QJsonObject progressData = jsonObj["data"].toObject();
-            int value = progressData["value"].toInt();
-            int max = progressData["max"].toInt();
-            ui->outputTextEdit->append("任务进度: " + QString::number(value) + "/" + QString::number(max));
+            // QJsonObject progressData = jsonObj["data"].toObject();
+            // int value = progressData["value"].toInt();
+            // int max = progressData["max"].toInt();
+            // ui->outputTextEdit->append("任务进度: " + QString::number(value) + "/" + QString::number(max));
 
         }
     } else if (jsonObj.contains("prompt_id")) {
@@ -759,4 +774,13 @@ void MainWindow::sendImage(QByteArray &imageData){
 // 暂时不用
 void MainWindow::generateRequestComfyUI(const QString& prompt, const QString& negativePrompt, const QString& key) {
     return;
+}
+
+
+void MainWindow::showConfigDialog() {
+    ConfigDialog dlg("./dataFile/ApiData.json", this);
+    if (dlg.exec() == QDialog::Accepted) {
+        m_currentConfig = dlg.getConfigData();
+        // 这里可以触发配置更新
+    }
 }

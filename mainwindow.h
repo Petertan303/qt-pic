@@ -117,6 +117,12 @@ private:
     void onNetworkReplyComfyUI(QString title, QString prompt, QString negativePrompt, QNetworkReply* reply);
     // 清理窗口中的日志
     void onClearButtonClicked();
+    // 设置窗口
+    void showConfigDialog();
+    // 当前的配置
+    QJsonObject m_currentConfig;
+    // 获取当前设置 json
+    QJsonObject getCurrentConfig() const;
 
 
     void saveJsonData(QString jsonString){
@@ -145,7 +151,9 @@ private:
         QJsonObject inputsObj = sixObj["inputs"].toObject();
         QJsonObject negativeObj = sevenObj["inputs"].toObject();
 
-        seedObj["seed"] = QRandomGenerator::global()->bounded(999999999);
+        if(seedObj["seed"]==""){
+            seedObj["seed"] = QRandomGenerator::global()->bounded(999999999);
+        }
         inputsObj["text"] = prompt;
         negativeObj["text"] = negative_prompt;
 
@@ -167,6 +175,9 @@ private:
         QJsonObject jsonObj = jsonDoc.object();
         jsonObj["prompt"] = prompt;
         jsonObj["negative_prompt"] = negative_prompt;
+        if(jsonObj["seed"] == ""){
+            jsonObj["seed"] = QRandomGenerator::global()->bounded(999999999);
+        }
         jsonDoc = QJsonDocument(jsonObj);
         return jsonDoc.toJson();
     }
