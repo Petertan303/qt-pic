@@ -123,19 +123,8 @@ void MainWindow::readApiData(){
             }
             requestMap.insert(stringToMode[value["name"].toString()], request);
             postDataMap.insert(stringToMode[value["name"].toString()], postData);
-            // if(value["name"]=="WebUI"){
-            //     qDebug() << value["body"];
-            // }
         }
     }
-
-    // QJsonDocument doc;
-    // doc.setArray(apiArray);
-    // saveJsonData(doc.toJson());
-
-
-    // qDebug() << postDataMap;
-
     return;
 }
 
@@ -695,14 +684,14 @@ void MainWindow::onWebSocketMessageReceived(const QString &message) {
             jsonObjTmp.insert("client_id", clientId);
             postDataMap[m_currentMode] = QJsonDocument(jsonObjTmp).toJson(QJsonDocument::Compact);
 
-            QString filePath = "./" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".json";
-            QFile file(filePath);
-            if (!file.open(QIODevice::WriteOnly)) {
-                qDebug() << "无法打开文件:" << filePath;
-                return;
-            }
-            qint64 bytesWritten = file.write(QJsonDocument(jsonObjTmp).toJson(QJsonDocument::Compact));
-            file.close();
+            // QString filePath = "./" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".json";
+            // QFile file(filePath);
+            // if (!file.open(QIODevice::WriteOnly)) {
+            //     qDebug() << "无法打开文件:" << filePath;
+            //     return;
+            // }
+            // qint64 bytesWritten = file.write(QJsonDocument(jsonObjTmp).toJson(QJsonDocument::Compact));
+            // file.close();
 
         }else if (msgType == "execution_start"){
             // 开始画图
@@ -782,5 +771,67 @@ void MainWindow::showConfigDialog() {
     if (dlg.exec() == QDialog::Accepted) {
         m_currentConfig = dlg.getConfigData();
         // 这里可以触发配置更新
+        updateNetworkConfig(m_currentConfig);
+    }
+}
+
+// 辅助函数：序列化表单数据
+QByteArray MainWindow::serializeFormData(const QJsonObject& jsonBody) {
+    QByteArray postData;
+    QStringList items;
+
+    std::function<void(const QJsonObject&, const QString&)> serialize =
+        [&](const QJsonObject& obj, const QString& prefix) {
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                QString key = prefix.isEmpty() ? it.key() : prefix + "[" + it.key() + "]";
+                if (it->isObject()) {
+                    serialize(it->toObject(), key);
+                } else {
+                    QString value = it->toVariant().toString();
+                    items << QUrl::toPercentEncoding(key) + "=" + QUrl::toPercentEncoding(value);
+                }
+            }
+        };
+
+    serialize(jsonBody, "");
+    postData = items.join("&").toUtf8();
+    return postData;
+}
+
+void MainWindow::updateNetworkConfig(const QJsonObject& config) {
+    requestMap.clear();
+    postDataMap.clear();
+
+    QJsonArray apiArray = config["data"].toArray();
+    foreach (const QJsonValue &value, apiArray) {
+        if (value.isObject()) {
+            QJsonObject item = value.toObject();
+            QNetworkRequest request;
+            QUrl url(item["url"].toString());
+            request.setUrl(url);
+
+            // 处理header
+            QJsonObject jsonHeader = item["header"].toObject();
+            for (auto it = jsonHeader.constBegin(); it != jsonHeader.constEnd(); ++it) {
+                if (it.key().compare("url", Qt::CaseInsensitive) != 0) {
+                    request.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
+                }
+            }
+
+            // 处理body
+            QByteArray postData;
+            QJsonObject jsonBody = item["body"].toObject();
+            if (request.header(QNetworkRequest::ContentTypeHeader).toString().contains("json")) {
+                QJsonDocument jsonDoc(jsonBody);
+                postData = jsonDoc.toJson(QJsonDocument::Compact);
+            } else {
+                postData = serializeFormData(jsonBody);
+            }
+
+            // 插入到映射表
+            ConnectionMode mode = stringToMode.value(item["name"].toString(), Default);
+            requestMap.insert(mode, request);
+            postDataMap.insert(mode, postData);
+        }
     }
 }

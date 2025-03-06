@@ -124,6 +124,10 @@ private:
     // 获取当前设置 json
     QJsonObject getCurrentConfig() const;
 
+    QByteArray serializeFormData(const QJsonObject& jsonBody);
+
+    void updateNetworkConfig(const QJsonObject& config);
+
 
     void saveJsonData(QString jsonString){
         QString filePath = "./postData.json";
@@ -151,9 +155,9 @@ private:
         QJsonObject inputsObj = sixObj["inputs"].toObject();
         QJsonObject negativeObj = sevenObj["inputs"].toObject();
 
-        if(seedObj["seed"]==""){
+        if(seedObj["seed"].toString()==""){
             seedObj["seed"] = QRandomGenerator::global()->bounded(999999999);
-        }
+        }else qDebug() << seedObj["seed"];
         inputsObj["text"] = prompt;
         negativeObj["text"] = negative_prompt;
 
@@ -175,9 +179,9 @@ private:
         QJsonObject jsonObj = jsonDoc.object();
         jsonObj["prompt"] = prompt;
         jsonObj["negative_prompt"] = negative_prompt;
-        if(jsonObj["seed"] == ""){
+        if(jsonObj["seed"].toString() == ""){
             jsonObj["seed"] = QRandomGenerator::global()->bounded(999999999);
-        }
+        }else qDebug() << jsonObj["seed"];
         jsonDoc = QJsonDocument(jsonObj);
         return jsonDoc.toJson();
     }

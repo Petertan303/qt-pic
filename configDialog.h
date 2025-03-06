@@ -23,7 +23,7 @@ private:
     void populateTabs();
 
     void populateForm(QFormLayout* layout, const QJsonObject& obj, const QString& prefix = "");
-    void updateJsonObject(QJsonObject& target, const QStringList& keys, const QString& value);
+    void updateJsonObject(QJsonObject& target, const QStringList& keys, const QVariant& value, int valueType);
 
     QString m_configPath;
     QJsonObject m_originalData;
